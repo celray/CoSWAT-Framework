@@ -1,4 +1,7 @@
+*.DS_Store
+.vscode/*
 model-data/*
+data-preparation/resources/login.py
 *.pyc
 data-preparation/dem-ws/aster/downloaded-tiles/*
 data-preparation/dem-ws/aster/resampled/*
