@@ -8,7 +8,7 @@ import platform
 
 # general
 data_resolution             = 30.91819138974098635 * 30     # 65
-processes                   = 50
+processes                   = 10
 no_data_value               = -999
 
 # dem variables

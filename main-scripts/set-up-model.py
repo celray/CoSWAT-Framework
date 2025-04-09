@@ -26,7 +26,7 @@ ignore_warnings()
 me = os.path.realpath(__file__)
 os.chdir(os.path.dirname(me))
 
-import resources.datavariables as variables
+import datavariables as variables
 
 def set_up_model(region_, version_, get_data_, period_):
     '''
@@ -46,7 +46,7 @@ args = sys.argv
 
 # example set-up-model.py 0.4.0 n 10 africa-madagascar
 if len(sys.argv) >= 5: regions = sys.argv[4:]
-else: regions = list_folders("./data-preparation/resources/regions/")
+else: regions = list_folders("../data-preparation/resources/regions/")
 
 version = args[1]
 get_data = args[2] if len(sys.argv) >= 3 else 'y'
