@@ -54,7 +54,8 @@ fao_usersoil_fn             = "../model-data/{region}/tables/worldSoilsUsersoil.
 fao_soil_shape_fn           = "./resources/CoSWAT-GM-fao-soil-DSMW-{auth}-{code}.gpkg"
 fao_usersoil_db             = "./resources/usersoilFAO.csv"
 
-esa_final_raster            = "../model-data/{region}/raster/landuse-esa-{year_model}-{auth}-{code}.tif"
+esa_final_raster            = "../model-data/{region}/raster/ricemap-v1-2025-{auth}-{code}.tif"
+# esa_final_raster            = "../model-data/{region}/raster/landuse-esa-{year_model}-{auth}-{code}.tif"
 esa_base_path               = "CCI/LandCover/byYear/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year}-v2.0.7.tif"
 esa_landuse_year            = 2011
 

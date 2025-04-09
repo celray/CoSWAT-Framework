@@ -47,10 +47,12 @@ if __name__ == '__main__':
         proj_dir    = f'{dst_dir}/{proj_name}'
 
         data_dir    = f'../model-data/{proj_name}'
+        details['data_dir'] = data_dir
 
         # data source paths
         dem_fn          = f"{data_dir}/raster/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
-        landuse_fn      = f"{data_dir}/raster/landuse-esa-{variables.esa_landuse_year}-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
+        # landuse_fn      = f"{data_dir}/raster/landuse-esa-{variables.esa_landuse_year}-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
+        landuse_fn      = "{data_dir}/raster/ricemap-v1-2025-{auth}-{code}.tif".format(**details)
         soils_fn        = f"{data_dir}/raster/soils-fao-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
 
         lakes_fn        = f"{data_dir}/shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp"

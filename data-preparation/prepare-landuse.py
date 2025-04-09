@@ -57,7 +57,8 @@ if __name__ == "__main__":
     create_path('./landuse-ws/')
     if single_year:
         link = variables.esa_base_path.format(year = year_model)
-        raster_fn = f"./landuse-ws/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year_model}-v2.0.7.tif"
+        # raster_fn = f"./landuse-ws/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year_model}-v2.0.7.tif"
+        raster_fn = "./landuse-ws/ricemap-v1-2025.tif"
         if not exists(raster_fn):
             wget.download(f'ftp://geo10.elie.ucl.ac.be/{link}', f'{raster_fn}')
             print()
@@ -86,20 +87,21 @@ if __name__ == "__main__":
         print(f"\t# setting bounds to  {variables.cutline.format(**details)}")
         print("\t> creating look up table")
         # Use Warp with precise settings
-        ds = gdal.Warp(final_raster.format(**details), 
-               f"./landuse-ws/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year_model}-v2.0.7.tif", 
-               cropToCutline=True,
-               dstSRS='{auth}:{code}'.format(**details), 
-               resampleAlg="mode", 
-               srcNodata=0, 
-               dstNodata=-999,
-               outputType=gdal.GDT_Int16, 
-               xRes=variables.data_resolution, yRes=variables.data_resolution,
-               targetAlignedPixels=True,  # Ensure output pixels are aligned to the target coordinates
-               cutlineDSName=variables.cutline.format(**details)
+        ds = gdal.Warp(final_raster.format(**details),
+                "./landuse-ws/ricemap-v1-2025.tif", 
+                # f"./landuse-ws/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year_model}-v2.0.7.tif", 
+                cropToCutline=True,
+                dstSRS='{auth}:{code}'.format(**details), 
+                resampleAlg="mode", 
+                srcNodata=0, 
+                dstNodata=-999,
+                outputType=gdal.GDT_Int16, 
+                xRes=variables.data_resolution, yRes=variables.data_resolution,
+                targetAlignedPixels=True,  # Ensure output pixels are aligned to the target coordinates
+                cutlineDSName=variables.cutline.format(**details)
         )
 
-        copy_file('./resources/esa_land_use_lookup.csv', '../model-data/{region}/tables/worldLanduseLookup.csv'.format(**details), v = False)
+        copy_file('./resources/landuse_lookup.csv', '../model-data/{region}/tables/worldLanduseLookup.csv'.format(**details), v = False)
 
         ref_raster = None
     ds = None
