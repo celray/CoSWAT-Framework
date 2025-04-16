@@ -264,11 +264,11 @@ weather_rlds_links_list['observed']       = './resources/weather-lists/observed/
 weather_resolution          = 4 # decimal degrees was 5
 
 prepare_weather             = True
-redo_weather                = True
+redo_weather                = False
 weather_redownload          = False
 
 # run settings
-run_period                  = '1980-1990'
+run_period                  = '1987-1990'
 
 # output processing
 output_re_shape             = True
