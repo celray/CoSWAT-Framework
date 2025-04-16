@@ -1,5 +1,5 @@
 qgs_template_prj = """<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis projectname="{continent}-{region}" version="3.22.10-Białowieża" saveDateTime="2023-01-23T14:22:31" saveUser="cjames" saveUserFull="Celray James CHAWANDA">
+<qgis projectname="{continent}-{region}" version="3.2.10-Białowieża" saveDateTime="2023-01-23T14:22:31" saveUser="cjames" saveUserFull="Celray James CHAWANDA">
   <homePath path=""/>
   <title>{continent}-{region}</title>
   <autotransaction active="0"/>

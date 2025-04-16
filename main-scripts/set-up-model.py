@@ -48,7 +48,7 @@ args = sys.argv
 if len(sys.argv) >= 5: regions = sys.argv[4:]
 else: regions = list_folders("../data-preparation/resources/regions/")
 
-version = args[1]
+version = args[1] if len(sys.argv) >= 2 else variables.version
 get_data = args[2] if len(sys.argv) >= 3 else 'y'
 
 processes = args[3] if len(sys.argv) >= 4 else variables.processes
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     pool.close()
 
     os.chdir(os.path.dirname(me))
-    os.system(f'map-outputs.py {version}')
+    # os.system(f'map-outputs.py {version}')
 
 
     # from cjfx import alert

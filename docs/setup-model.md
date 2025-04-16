@@ -23,7 +23,7 @@ python set-up-model.py <version> <get_data> <processes> [regions...]
 
 ### Example
 ```bash
-python set-up-model.py 0.4.0 n 10 africa-madagascar
+python set-up-model.py 0.4.0 y 10 africa-madagascar
 ```
 
 ## Detailed Process Documentation

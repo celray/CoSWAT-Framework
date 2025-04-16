@@ -14,6 +14,7 @@ Updated : 26/12/2022
 '''
 
 import os
+import re
 import sys
 import urllib
 from collections import defaultdict
@@ -208,57 +209,21 @@ def points_to_geodataframe(point_pairs_list, columns = ['latitude', 'longitude']
     return gdf
 
 
-def convert_webm_to_mp3(webm_path, mp3_path):
-    # load webm file
-    print(f"converting {webm_path} to {mp3_path}")
-    audio = AudioSegment.from_file(webm_path, format=webm_path.split(".")[-1])
-
-    # save as mp3
-    audio.export(mp3_path, format="mp3")
-
-
-
-def download_video_youtube(url, path, audio_only = False, download_list = False, numbering = False):
-    # create YouTube object
-
-    is_playlist = False
-
-    if "list=" in url:
-        is_playlist = True
+def isYearInFileRange(fileName, yearToCheck):
+    # match all sequences of 4 digits (potential years)
+    possibleYears = re.findall(r'(?<!\d)(\d{4})(?!\d)', fileName)
     
-    video_urls = [url]
-    if is_playlist:
-        if download_list:
-            playlist = Playlist(url)
-            video_urls = playlist.video_urls
+    if len(possibleYears) < 2:
+        raise ValueError("Could not find two years in the file name.")
 
-    counting = 0
-    for vid_url in video_urls:
-        counting += 1
-            
-        yt = YouTube(vid_url)
-        
-        # select the highest quality stream
-        if audio_only:
-            print(f"downloading audio from video: {vid_url}")
-            stream = yt.streams.get_audio_only()
-        else:
-            print(f"downloading video: {vid_url}")
-            stream = yt.streams.get_highest_resolution()
-        
-        create_path(f"{path}/")
+    # convert to integers and sort
+    possibleYears = sorted([int(year) for year in possibleYears])
+    startYear, endYear = possibleYears[0], possibleYears[-1]
 
-        filename = stream.download(path, f"{counting}. {yt.title}.mp4" if numbering else f"{yt.title}.mp4")
-        full_path = os.path.join(path, filename)
-
-        if audio_only:
-            convert_webm_to_mp3(full_path, full_path.replace(full_path.split(".")[-1], "mp3"))
-            delete_file(full_path, v=False)
+    return startYear <= int(yearToCheck) <= endYear
 
 def get_relative_path(base_path, target_path):
     return os.path.relpath(target_path, base_path)
-
-
 
 def get_usgs_nutrients(file_path, monthly=True):
 
@@ -1690,7 +1655,6 @@ def print_list(list_object):
 
 def disp(string_):
     print(f"\t- {string_}")
-
 
 def create_path(path_name, v = False):
     path_name = os.path.dirname(path_name)

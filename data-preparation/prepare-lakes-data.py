@@ -41,7 +41,7 @@ if len(sys.argv) < 2:
     print(f"! select a region for which to prepare the dataset. options are: {', '.join(list_folders('./resources/regions/'))}\n")
     sys.exit()
 
-print('# preparing lakes data\n')
+print('\n# preparing lakes data...\n')
 
 regions = sys.argv[1:]
 

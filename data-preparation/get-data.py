@@ -52,11 +52,8 @@ os.system(f"{get_python_exe()} prepare-landuse.py {regions_}")
 # create lake shapefile
 os.system(f"{get_python_exe()} prepare-lakes-data.py {regions_}")
 
-# create download and digest weather data
-if variables.redo_weather: os.system(f"{get_python_exe()} digest-nc-weather-files.py")
-
 # create weather data
-os.system(f"{get_python_exe()} prepare-weather-isimip.py {regions_}")
+os.system(f"{get_python_exe()} prepare-weather.py {regions_}")
 
 # get grdc stations
 os.system(f"{get_python_exe()} get-grdc-stations.py {regions_}")

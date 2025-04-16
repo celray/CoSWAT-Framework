@@ -17,6 +17,9 @@ import datavariables as variables
 metadata    = pandas.read_excel("./resources/GRDC_Stations.xlsx")
 grdc_ts_dir = "./resources/grdc_timeseries"
 
+if not exists(f"{grdc_ts_dir}/"):
+    os.system(f"unzip ./resources/grdc_timeseries.zip -d ./resources")
+
 create_path("./resources/ws/")
 
 if len(sys.argv) < 2:

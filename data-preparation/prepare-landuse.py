@@ -55,12 +55,13 @@ if __name__ == "__main__":
 
     # download
     create_path('./landuse-ws/')
+    
     if single_year:
         link = variables.esa_base_path.format(year = year_model)
         # raster_fn = f"./landuse-ws/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year_model}-v2.0.7.tif"
         raster_fn = "./landuse-ws/ricemap-v1-2025.tif"
         if not exists(raster_fn):
-            wget.download(f'ftp://geo10.elie.ucl.ac.be/{link}', f'{raster_fn}')
+            wget.download(f'{variables.esa_base_url}/{link}', f'{raster_fn}')
             print()
     else:
         pool = mp.Pool(variables.processes)
@@ -71,7 +72,7 @@ if __name__ == "__main__":
             raster_fn = f"./landuse-ws/ESACCI-LC-L4-LCCS-Map-300m-P1Y-{year}-v2.0.7.tif"
 
             if not exists(raster_fn):
-                jobs.append([f'ftp://geo10.elie.ucl.ac.be/{link}', f'{raster_fn}'])
+                jobs.append([f'{variables.esa_base_url}/{link}', f'{raster_fn}'])
 
         results = pool.starmap_async(wget.download, jobs)
         results.get()

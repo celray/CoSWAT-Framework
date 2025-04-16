@@ -41,7 +41,7 @@ hru-lte_pw                   n             n             y             y
 channel                      y             y             y             y  
 channel_sd                   y             y             y             y  
 aquifer                      n             y             y             y  
-reservoir                    n             y             y             y  
+reservoir                    y             y             y             y  
 recall                       n             n             y             y  
 hyd                          n             n             y             y  
 ru                           n             n             y             y  

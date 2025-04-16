@@ -20,7 +20,7 @@ from osgeo import gdalconst
 import sys, os
 import rasterio
 
-from cjfx import open_tif_as_array, read_from, write_to, list_folders, ignore_warnings
+from cjfx import open_tif_as_array, read_from, write_to, list_folders, ignore_warnings, create_path
 
 ignore_warnings()
 
@@ -75,6 +75,7 @@ if __name__ == "__main__":
 
     if not os.path.exists(variables.fao_tmp_raster):
         print(f'\t> rasterising {variables.fao_soil_shape_fn.format(**details)}')
+        create_path(variables.fao_tmp_raster)
         rasterise_shape(variables.fao_soil_shape_fn.format(**details), "SNUM", variables.fao_tmp_raster, variables.aster_tmp_tif)
 
     for region in regions:

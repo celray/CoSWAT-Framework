@@ -12,7 +12,8 @@ GitHub  : github.com/celray
 '''
 
 import os, sys, platform, shutil
-from cjfx import list_folders, exists, write_to, sqlite_connection, list_files, file_name, copy_file, show_progress, goto_dir, pandas, sqlite3, ignore_warnings, download_file
+from cjfx import list_folders, exists, write_to, read_from, sqlite_connection, list_files, file_name, copy_file, show_progress, goto_dir, pandas, sqlite3, ignore_warnings, download_file
+import datavariables as variables
 
 ignore_warnings()
 
@@ -33,9 +34,37 @@ if __name__ == '__main__':
     else: regions = list_folders("../data-preparation/resources/regions/")
 
     for region in regions:
-                    
-        # set up api and project variables
 
+        # get observed scenario and gcm, if many, take first hits
+        obsScenario = None
+        obsDataset  = None
+
+        otherScenarios = {}
+        for scenario in variables.weather_pr_links_list:
+
+            if scenario == 'observed':
+                obsScenario = scenario
+                for gcm in variables.scenariosData[scenario]:
+                    if gcm in variables.available_models:
+                        obsDataset = gcm
+                        break
+            else:
+                otherScenarios[scenario] = []
+
+                for gcm in variables.scenariosData[scenario]:
+                    if gcm in variables.available_models:
+                        otherScenarios[scenario].append(gcm)
+            
+
+        if obsScenario is None:
+            print(f"\t! observed scenario not found for {region}, skipping")
+            continue
+
+        if obsDataset is None:
+            print(f"\t! observed dataset not found for {region}, skipping")
+            continue
+        
+        # set up api and project variables
         # download weatherGen if it does not exist
         if not exists('../data-preparation/resources/swatplus_wgn.sqlite'):
             
@@ -52,8 +81,7 @@ if __name__ == '__main__':
         api              = f'../data-preparation/resources/swatplus_api' if platform.system() == "Linux" else None
         project_db       = f'../model-setup/CoSWATv{version}/{region}/{region}.sqlite'
         datasets_db_file = f'../data-preparation/resources/swatplus_datasets.sqlite'
-        weather_dir      = f'../model-data/{region}/weather/swatplus/observed'
-        other_scenarios  = [dn for dn in list_folders(f'../model-data/{region}/weather/swatplus/') if dn != 'observed']
+        weather_dir      = f'../model-data/{region}/weather/swatplus/{obsScenario}/{obsDataset}'
         txtinout_dir     = f'../model-setup/CoSWATv{version}/{region}/Scenarios/Default/TxtInOut'
         weather_wgn_db   = f'../data-preparation/resources/swatplus_wgn.sqlite'; weather_wgn_db = os.path.abspath(weather_wgn_db)
         editor_version   = f'2.3.3'
@@ -120,7 +148,6 @@ if __name__ == '__main__':
         db_sqlite.cursor.execute(f"UPDATE project_config SET editor_version = '{editor_version}' WHERE id='1';")
         db_sqlite.commit_changes()
 
-
         # import weather
         weather_files_list = list_files(f"{weather_dir}/")
         counter = 0; all = len(weather_files_list)
@@ -128,10 +155,15 @@ if __name__ == '__main__':
         for fn in weather_files_list:
             counter += 1; show_progress(counter, all)
             copy_file(fn, f"{txtinout_dir}/{file_name(fn)}", replace=False)
+        
+        if exists(f"{txtinout_dir}/tmp.cli"):
+            os.remove(f"{txtinout_dir}/tmp.cli")
+            copy_file(f"{txtinout_dir}/tem.cli", f"{txtinout_dir}/tmp.cli", replace=True)
 
         db_sqlite.cursor.execute("UPDATE project_config SET weather_data_dir = 'Scenarios/Default/TxtInOut' WHERE id='1';")
         db_sqlite.cursor.execute("UPDATE project_config SET input_files_dir = 'Scenarios/Default/TxtInOut' WHERE id='1';")
         db_sqlite.cursor.execute("UPDATE project_config SET wgn_table_name = 'wgn_cfsr_world' WHERE id='1';")
+        db_sqlite.cursor.execute("UPDATE file_cio SET file_name = 'tmp.cli' WHERE id='12';")
         db_sqlite.cursor.execute(f"UPDATE project_config SET wgn_db = '{weather_wgn_db}' WHERE id='1';")
         db_sqlite.commit_changes()
 
@@ -162,23 +194,39 @@ if __name__ == '__main__':
 
 
         # write files
+        # db_sqlite.cursor.execute("UPDATE file_cio SET file_name = 'tem.cli' WHERE id='12';")
+        db_sqlite.close_connection()
+
         command  = f'write_files '
         command += f"--project_db_file {project_db} "
 
+        # if exists(f"{txtinout_dir}/tmp.cli"):
+            # os.remove(f"{txtinout_dir}/tmp.cli")
+        
         os.system(command = f'{api} {command}')
-        db_sqlite.close_connection()
 
-        for scen in other_scenarios:
-            f_list = list_files(f'../model-data/{region}/weather/swatplus/{scen}/')
+        for scen in otherScenarios:
+            for gcm in otherScenarios[scen]:
+                if not exists(f'../model-data/{region}/weather/swatplus/{scen}/{gcm}'):
+                    print(f'\t! {scen} weather data for {gcm} not found, skipping')
+                    continue
+                f_list = list_files(f'../model-data/{region}/weather/swatplus/{scen}/{gcm}/')
 
-            print(f'\n\t> copying {scen} weather files')
-            for fn in f_list:
-                copy_file(fn, f"{txtinout_dir}/{scen}/{file_name(fn)}", replace=True)
+                print(f'\n\t> copying {scen}:{gcm} weather files')
+                for fn in f_list:
+                    copy_file(fn, f"{txtinout_dir}/{scen}/{gcm}/{file_name(fn)}", replace=True)
+
+
+        # patch file.cio temperature file name
+        cioFile         = f"{txtinout_dir}/file.cio"
+        cioFileContents = read_from(cioFile,)
 
         # modify weather path in file.cio
-                
+        # pending
 
-        from cjfx import alert
-        alert(f'done with editor in {region}', 'SWAT+ Editor run complete')
+        cioFileString   = "".join(cioFileContents)
+
+        write_to(cioFile, cioFileString.replace('tmp.cli', 'tem.cli'))
+        print(f'done with editor in {region}', 'SWAT+ Editor run complete')
 
         print()
