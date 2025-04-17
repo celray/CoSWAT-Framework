@@ -17,9 +17,9 @@ processes                   = 10
 no_data_value               = -999
 
 # dem variables
-re_resample                 = False
-remerge_dem                 = False
-redownload_dem              = False
+re_resample                 = True
+remerge_dem                 = True
+redownload_dem              = True
 
 # outlets variables
 channel_snap_thres          = 3500
