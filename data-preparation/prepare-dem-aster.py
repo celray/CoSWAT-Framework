@@ -83,9 +83,14 @@ if __name__ == "__main__":
                 print(f"provide your login data in the 'login.py' file")
                 sys.exit()
 
-    # we list all the tiles
-    local_tiles = list_files(f'{variables.aster_download_tiles_dir}', 'tif')
-    remote_tiles = list_files(f'{variables.aster_remote_tiles_dir}', 'tif')
+    # we list all the tiles, conditionally
+    local_tiles, remote_tiles = [], []
+    if variables.re_resample:
+        local_tiles = list_files(f'{variables.aster_download_tiles_dir}', 'tif')
+        remote_tiles = list_files(f'{variables.aster_remote_tiles_dir}', 'tif')
+    if variables.remerge_dem:
+        local_tiles = list_files(f'{variables.aster_download_tiles_dir}', 'tif') if not variables.re_resample else []
+        remote_tiles = list_files(f'{variables.aster_remote_tiles_dir}', 'tif') if not variables.re_resample else []
 
 
     # create a pool of workers

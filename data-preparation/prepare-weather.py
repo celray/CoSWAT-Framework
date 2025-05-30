@@ -55,9 +55,14 @@ if __name__ == "__main__":
 
     currentVariables = {}
 
+    counter = 0
     while exists(f'{weatherDir}/download/downloadLock'):
         print("  > waiting for download lock to be released...")
         time.sleep(5)
+        counter += 1
+        if counter > 120:
+            print("  > download lock not released after 10 minutes, exiting...")
+            sys.exit(1)
 
     writeFile(f'{weatherDir}/download/downloadLock', 'locked')
 
@@ -116,13 +121,13 @@ if __name__ == "__main__":
                     continue
                         
                 if variables.weather_redownload:
-                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/'])
+                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 1])
                     downloadString += f'{line}\n'
                 elif not exists(f'{weatherDir}/download/{scenario}/{gcm}/{getFileBaseName(line, extension = True)}'):
-                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/'])
+                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 1])
                     downloadString += f'{line}\n'
 
-                downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/'])
+                downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 1])
                 createPath(f'{weatherDir}/download/{scenario}/{gcm}/')
 
             writeFile(f"{weatherDir}/download_links.txt", downloadString)
@@ -251,7 +256,6 @@ if __name__ == "__main__":
                     selectedCoordinates.append(f"{row['geometry'].x},{row['geometry'].y},{extractRasterValue(variables.aster_tmp_tif, row['geometry'].y, row['geometry'].x)}")
                 
                 for extType in extTypes:
-                    if not extType == "wnd":continue 
                     if not extType in currentVariables:
                         print(f"  > no variable found for {extType}")
                         continue

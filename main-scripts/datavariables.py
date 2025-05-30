@@ -18,7 +18,7 @@ no_data_value               = -999
 # dem variables
 re_resample                 = False
 remerge_dem                 = False
-redownload_dem              = True
+redownload_dem              = False
 
 # outlets variables
 channel_snap_thres          = 3500

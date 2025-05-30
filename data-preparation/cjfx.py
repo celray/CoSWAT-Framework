@@ -1660,7 +1660,7 @@ def create_path(path_name, v = False):
     path_name = os.path.dirname(path_name)
     if path_name == '':
         path_name = './'
-    if not os.path.isdir(path_name):
+    if not os.path.lexists(path_name):
         os.makedirs(path_name)
         if v:
             print(f"\t> created path: {path_name}")

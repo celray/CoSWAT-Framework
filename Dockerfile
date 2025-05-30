@@ -63,7 +63,7 @@ RUN chmod +x /CoSWAT-Global-Model/data-preparation/*
 RUN echo '#!/bin/bash\n\
 if [ -d "/CoSWAT-Global-Model/main-scripts" ] && [ "$(ls -A /CoSWAT-Global-Model/main-scripts/ 2>/dev/null)" ]; then\n\
   chmod +x /CoSWAT-Global-Model/main-scripts/*\n\
-  echo "Made scripts in main-scripts executable"\n\
+  echo "made scripts in main-scripts executable"\n\
 fi\n\
 exec "$@"' > /entrypoint.sh
 
