@@ -78,11 +78,52 @@ def count_intersections(line, polygon):
     return 0
 
 
+class outFX:
+    """
+    Class to handle output messages. currently dummy
+    """
+    def __init__(self, message:str, v = False):
+        self.message = message
+        self.v = v
+        self.messageBank = []
+        self.write(message)
+
+    def write(self, message: str) -> None:
+        """
+        Write message to console and log file.
+        """
+        
+        if self.v: print(message)
+        self.messageBank.append(message)
+    
+    def append(self, message: str) -> None:
+        """
+        Append message to console and log file.
+        """
+        if self.v: self.write(message)
+        self.messageBank.append(message)
+
+    def moveCursor(self, cursor) -> None:
+        """
+        Move the cursor to a new position in the output.
+        """
+        pass
+
+    def __call__(self, message: str) -> None:
+        """
+        Allow the object to be called like a function.
+        """
+        self.append(message)
+
+
 import atexit
 
 
 from resources.QSWATPlus.QSWATPlusMain import QSWATPlus
 from resources.QSWATPlus.delineation import Delineation
+from resources.QSWATPlus.floodplain import Floodplain
+from resources.QSWATPlus.landscape import Landscape
+from resources.QSWATPlus.raster import Raster
 from resources.QSWATPlus.hrus import HRUs
 from resources.QSWATPlus.QSWATUtils import QSWATUtils
 from resources.QSWATPlus.parameters import Parameters
@@ -155,7 +196,7 @@ if __name__ == '__main__':
         projFile = f"{projDir}/{region}.qgs"
 
         proj = QgsProject.instance()
-
+        
         proj.read(projFile)
 
         plugin.setupProject(proj, True)
@@ -179,7 +220,6 @@ if __name__ == '__main__':
         user_soil_df.to_sql('usersoil', db, if_exists="replace", index=False, )
 
         plugin._gv.db.clearTable('BASINSDATA')
-
         plugin.setupProject(proj, True)
 
         if not (os.path.exists(plugin._gv.textDir) and os.path.exists(plugin._gv.landuseDir)):
@@ -202,13 +242,23 @@ if __name__ == '__main__':
         
         delin.runTauDEM2(ver = version, reg = region,
             in_outlet_path = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets.shp'),
-            Mask_gpd = outlets_buffer_gpd,
-            sel_file = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets_sel.shp')
+            Mask_gpd    = outlets_buffer_gpd,
+            sel_file    = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets_sel.shp')
         )
 
-        lakesShapefn = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp')
-        rivsShapefn  = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}channel.shp')
+        lakesShapefn    = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp')
+        rivsShapefn     = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}channel.shp')
 
+        print("Running floodplain...")
+        fxObj           = outFX('Running floodplain...')
+        floodPlain      = Floodplain(plugin._gv, fxObj, 1)
+        landScape       = Landscape(plugin._gv, fxObj, 1, fxObj)
+
+        landScape.clipperFile = plugin._gv.subbasinsFile
+        landScape.calcHillslopes(variables.thresholdCh, landScape.clipperFile, proj.layerTreeRoot())
+
+        landScape.calcFloodplain(True, proj.layerTreeRoot())
+        plugin._gv.floodFile = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/invflood0_00.tif')
 
         print("Filtering reservoirs...")
         try:
@@ -261,7 +311,10 @@ if __name__ == '__main__':
 
         hrus = HRUs(plugin._gv, dlg.reportsBox)
         hrus.init()
+        hrus._gv.useLandscapes = True
         hrus._dlg.generateFullHRUs.setEnabled(True)
+        hrus.fullHRUsWanted = True
+        hrus.initFloodplain()
         hrus.readFiles()
 
         if not os.path.exists(QSWATUtils.join(plugin._gv.textDir, Parameters._TOPOREPORT)):

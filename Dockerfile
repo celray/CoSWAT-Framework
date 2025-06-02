@@ -13,8 +13,10 @@ RUN pip3 install hydroeval wand cython
 RUN pip3 install matplotlib
 RUN pip3 install cjfx
 RUN pip3 install netcdf4 fiona
-RUN pip3 install numpy==1.23.4 pandas==1.5.3 xarray==2022.12.0 matplotlib==3.6.3 rasterio==1.3.4
 RUN pip3 install ccfx
+RUN pip3 install numpy==1.23.4
+RUN pip3 install pandas==1.5.3 xarray==2022.12.0 matplotlib==3.6.3 rasterio==1.3.4 numexpr==2.8.4 bottleneck==1.3.6
+RUN pip3 install numpy==1.23.4
 
 # Set Python 3.10 as the default python3
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
@@ -52,12 +54,26 @@ RUN echo 'export PYTHONPATH=$PYTHONPATH:/CoSWAT-Global-Model/data-preparation' >
 RUN echo 'export PATH=$PATH:/CoSWAT-Global-Model/main-scripts' >> ~/.bashrc 
 RUN echo 'export PYTHONPATH=$PYTHONPATH:/CoSWAT-Global-Model/main-scripts' >> ~/.bashrc
 
-RUN cp /root/.local/share/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/static/api_dist/swatplus_api /CoSWAT-Global-Model/data-preparation/resources/swatplus_api
+# RUN cp /root/.local/share/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/static/api_dist/swatplus_api /CoSWAT-Global-Model/data-preparation/resources/swatplus_api
+RUN rm /root/.local/share/SWATPlus/Databases/swatplus_datasets.sqlite
+RUN cp /CoSWAT-Global-Model/data-preparation/resources/swatplus_datasets.sqlite /root/.local/share/SWATPlus/Databases/swatplus_datasets.sqlite
+
+
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/polygonizeInC.cpython-310-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/polygonizeInC.cpython-310-x86_64-linux-gnu.so
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/polygonizeInC.cpython-311-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/polygonizeInC.cpython-311-x86_64-linux-gnu.so
+
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/dataInC.cpython-310-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/dataInC.cpython-310-x86_64-linux-gnu.so
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/dataInC.cpython-311-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/dataInC.cpython-311-x86_64-linux-gnu.so
+
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/jenks.cpython-310-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/jenks.cpython-310-x86_64-linux-gnu.so
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/jenks.cpython-311-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/jenks.cpython-311-x86_64-linux-gnu.so
+
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/polygonizeInC2.cpython-310-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/polygonizeInC2.cpython-310-x86_64-linux-gnu.so
+RUN cp ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus/polygonizeInC2.cpython-311-x86_64-linux-gnu.so /CoSWAT-Global-Model/data-preparation/resources/QSWATPlus/polygonizeInC2.cpython-311-x86_64-linux-gnu.so
 
 # set executable
 RUN chmod +x /CoSWAT-Global-Model/data-preparation/resources/swatplus_api
 RUN chmod +x /CoSWAT-Global-Model/data-preparation/*
-
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\

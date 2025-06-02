@@ -30,7 +30,7 @@ minimum_channel_segments    = 11
 thresholdSt                 = 150 # 866
 thresholdCh                 = 150 # 866
 
-executable_path             = "C:/SWAT/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/swat_exe/rev60.5.4_64rel.exe" if platform.system() == "Windows" else "/root/.local/share/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/static/swat_exe/rev60.5.7_64rel_linux"
+executable_path             = "C:/SWAT/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/swat_exe/rev60.5.4_64rel.exe" if platform.system() == "Windows" else "/CoSWAT-Global-Model/data-preparation/resources/swatplus-61.0.2"
 
 continental_mass            = './resources/CoSWAT-GM-world-land-masses-{auth}-{code}.gpkg'
 cutline                     = './resources/regions/{region}/land_mass-{auth}-{code}.gpkg'

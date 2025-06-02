@@ -73,10 +73,6 @@ if __name__ == '__main__':
                 download_file("https://plus.swat.tamu.edu/downloads/swatplus_wgn.zip", '../data-preparation/resources/swatplus_wgn.zip')
 
             shutil.unpack_archive('../data-preparation/resources/swatplus_wgn.zip', '../data-preparation/resources/')
-        
-        if exists('/root/.local/share/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/static/api_dist/swatplus_api'):
-            copy_file('/root/.local/share/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/static/api_dist/swatplus_api',
-                      '../data-preparation/resources/swatplus_api', replace=True)
 
         api              = f'../data-preparation/resources/swatplus_api' if platform.system() == "Linux" else None
         project_db       = f'../model-setup/CoSWATv{version}/{region}/{region}.sqlite'
@@ -84,7 +80,7 @@ if __name__ == '__main__':
         weather_dir      = f'../model-data/{region}/weather/swatplus/{obsScenario}/{obsDataset}'
         txtinout_dir     = f'../model-setup/CoSWATv{version}/{region}/Scenarios/Default/TxtInOut'
         weather_wgn_db   = f'../data-preparation/resources/swatplus_wgn.sqlite'; weather_wgn_db = os.path.abspath(weather_wgn_db)
-        editor_version   = f'2.3.3'
+        editor_version   = f'3.0.8'
         db_sqlite        = sqlite_connection(project_db) 
         db_sqlite.connect()
 
