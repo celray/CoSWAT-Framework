@@ -121,13 +121,13 @@ if __name__ == "__main__":
                     continue
                         
                 if variables.weather_redownload:
-                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 1])
+                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 2])
                     downloadString += f'{line}\n'
                 elif not exists(f'{weatherDir}/download/{scenario}/{gcm}/{getFileBaseName(line, extension = True)}'):
-                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 1])
+                    downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 2])
                     downloadString += f'{line}\n'
 
-                downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 1])
+                downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 2])
                 createPath(f'{weatherDir}/download/{scenario}/{gcm}/')
 
             writeFile(f"{weatherDir}/download_links.txt", downloadString)

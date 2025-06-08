@@ -11,13 +11,12 @@ import platform
 version                     = "0.4.5"
 
 # general
-data_resolution             = 30.91819138974098635 * 30     # 65
+data_resolution             = 500 #30.91819138974098635 * 30     # 65
 processes                   = 10
 no_data_value               = -999
 
 # dem variables
 re_resample                 = False
-remerge_dem                 = False
 redownload_dem              = False
 
 # outlets variables
@@ -40,8 +39,6 @@ final_proj_code             = 54003
 
 aster_download_tiles_dir    = './dem-ws/aster/downloaded-tiles'
 aster_remote_tiles_dir      = './non-existing-path'
-
-aster_resampled_dir         = './dem-ws/aster/resampled'
 
 aster_download_links        = './resources/aster-tile-links.txt'
 aster_url                   = "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/ASTGTM.003/ASTGTMV003_N01E042_dem.tif"

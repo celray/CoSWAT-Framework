@@ -33,10 +33,16 @@ def download(sess, url_, dst):
     file_data.write(response.content)
     file_data.close()
 
-
+def progressCallback(complete, message, unknown):
+    """Callback function to show gdal.<function> progress."""
+    print(f"\r\t> progress: {complete * 100:.1f}%", end='')
+    sys.stdout.flush()
+    return 1
 
 if __name__ == "__main__":
-
+    if not exists("./resources/regions/"):
+        print('! no regions found, creating')
+        unzip_file('./resources/regions.zip', './resources/')
     if len(sys.argv) < 2:
         print(f"! select a region for which to prepare the dataset. options are: {', '.join(list_folders('./resources/regions/'))}\n")
         sys.exit()
@@ -56,7 +62,6 @@ if __name__ == "__main__":
     }
 
     create_path(f"{variables.aster_download_tiles_dir}/")
-    create_path(f"{variables.aster_resampled_dir}/")
 
     if variables.redownload_dem:
         with requests.Session() as session:
@@ -85,47 +90,46 @@ if __name__ == "__main__":
 
     # we list all the tiles, conditionally
     local_tiles, remote_tiles = [], []
-    if variables.re_resample:
-        local_tiles = list_files(f'{variables.aster_download_tiles_dir}', 'tif')
-        remote_tiles = list_files(f'{variables.aster_remote_tiles_dir}', 'tif')
-    if variables.remerge_dem:
-        local_tiles = list_files(f'{variables.aster_download_tiles_dir}', 'tif') if not variables.re_resample else []
-        remote_tiles = list_files(f'{variables.aster_remote_tiles_dir}', 'tif') if not variables.re_resample else []
 
+    local_tiles = list_files(f'{variables.aster_download_tiles_dir}', 'tif')
+    remote_tiles = list_files(f'{variables.aster_remote_tiles_dir}', 'tif')
 
-    # create a pool of workers
-    pool = multiprocessing.Pool(variables.processes)
+    allTiles = [os.path.abspath(fn) for fn in (local_tiles + remote_tiles)]
 
-    # make jobs
-    jobs = []
-    
+    # now we will build a virtual raster file
+    if len(allTiles) == 0:
+        print('! no tiles found, exiting')
+        sys.exit()
+
+    # we then create a vrt
+    vrt_output_path = f"{variables.aster_download_tiles_dir}/../global-aster.vrt"
+    if not exists(vrt_output_path):
+        print(f'\t> creating vrt from tiles')
+        vrt = gdal.BuildVRT(vrt_output_path, allTiles, callback=progressCallback, callback_data=None)
+        if vrt is None:
+            raise RuntimeError("Failed to create VRT")
+        vrt = None
+
     # re-resample
     if variables.re_resample:
-        [delete_file(fn) for fn in list_files(f'{variables.aster_resampled_dir}/')]
-        [jobs.append([fn, f"{variables.aster_resampled_dir}/{file_name(fn, extension=True)}", variables.data_resolution]) for fn in local_tiles]
-        [jobs.append([fn, f"{variables.aster_resampled_dir}/{file_name(fn, extension=True)}", variables.data_resolution]) for fn in remote_tiles]
-    else:
-        [jobs.append([fn, f"{variables.aster_resampled_dir}/{file_name(fn, extension=True)}", variables.data_resolution]) for fn in local_tiles if not exists(f"{variables.aster_resampled_dir}/{file_name(fn, extension=True)}")]
-        [jobs.append([fn, f"{variables.aster_resampled_dir}/{file_name(fn, extension=True)}", variables.data_resolution]) for fn in remote_tiles if not exists(f"{variables.aster_resampled_dir}/{file_name(fn, extension=True)}")]
+        print(f'\n\t> resampling tiles to {variables.data_resolution} m')
+        try:
+            gdal.Warp(
+                variables.aster_tmp_tif, 
+                vrt_output_path, 
+                dstSRS=f'{variables.final_proj_auth}:{variables.final_proj_code}', 
+                xRes=variables.data_resolution, 
+                yRes=variables.data_resolution, 
+                resampleAlg='bilinear', 
+                creationOptions=['COMPRESS=LZW'],
+                callback=progressCallback,  
+                callback_data=None
+            )
+        except Exception as e:
+            print(f"\t> Error during gdal.Warp: {e}")
+            raise
 
-    if variables.remerge_dem:
-        print(f"\t> resampling {len(jobs)} files"); time.sleep(2)
-        results = pool.starmap_async(resample_raster, jobs)
-        results.get()
-
-    resampled_dem_files = list_files(f"{variables.aster_resampled_dir}", "tif")   # list files that have been resampled
-
-    pool.close()
-    pool.join()
-
-    print('\n\n\t> merging rasters')
     
-    if variables.remerge_dem:
-        args_ = ['', '-init', '-999', '-o', variables.aster_tmp_tif]
-        [args_.append(tif_file) for tif_file in resampled_dem_files]
-        gdal_merge.main(args_)
-    
-    ds = None
     print('\t> subseting raster data')
     for region in regions:
         print(f'\t - processing {region}')
