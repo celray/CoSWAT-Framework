@@ -12,7 +12,8 @@ version                     = "0.4.5"
 
 # general
 data_resolution             = 500 #30.91819138974098635 * 30     # 65
-processes                   = 10
+processes                   = 20
+taudemProcesses             = 5
 no_data_value               = -999
 
 # dem variables
@@ -29,7 +30,7 @@ minimum_channel_segments    = 11
 thresholdSt                 = 150 # 866
 thresholdCh                 = 150 # 866
 
-executable_path             = "C:/SWAT/SWATPlus/SWATPlusEditor/resources/app.asar.unpacked/swat_exe/rev60.5.4_64rel.exe" if platform.system() == "Windows" else "/CoSWAT-Global-Model/data-preparation/resources/swatplus-61.0.2"
+executable_path             = "/CoSWAT-Global-Model/data-preparation/resources/rev60.5.7_64rel_linux"
 
 continental_mass            = './resources/CoSWAT-GM-world-land-masses-{auth}-{code}.gpkg'
 cutline                     = './resources/regions/{region}/land_mass-{auth}-{code}.gpkg'
@@ -70,22 +71,21 @@ grdc_final_gpkg             = "../model-data/{region}/shapes/grdc_stations-{auth
 
 # weather parameters
 weather_points_all          = './weather-ws/global-points.gpkg'
-weather_points_final        = './weather-ws/global-weather-points.gpkg'
 
 weather_resolution          = 0.5      # decimal degrees was 5
 
 prepare_weather             = True
-redo_weather                = True
+redo_weather                = False
 weather_redownload          = False
 
 # run settings
-run_period                  = '1981-1990'
+run_period                  = '1981-1985'
 historical_period           = '1981-2010'
 future_period               = '2071-2100'
 
 # output processing
-output_re_shape             = True
-
+individual_maps             = True      # create map pieces for each region
+remerge_maps                = True      # (re)merge all maps into one file
 
 # weather data
 available_scenarios        = ['observed',] # 'historical', 'ssp126', 'ssp370', 'ssp585']

@@ -2,6 +2,7 @@
 
 import sys, os
 from cjfx import *
+import argparse
 
 ignore_warnings()
 
@@ -14,19 +15,25 @@ from resources.template_proj import template_string
 
 if __name__ == '__main__':
 
+    # create argument parser
+    parser = argparse.ArgumentParser(description="a script to initialise a SWAT+ project for a given region")
+
+    parser.add_argument("r", help="the name of the region to initialise the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+    parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+
+    args = parser.parse_args()
+
+
     print('\n# initialising SWAT+ project')
     version = variables.version
 
-    if len(sys.argv) > 1:
+    if args.v:
+        version = args.v
 
-        version = sys.argv[1]
-        if len(sys.argv) > 2:
-            regions = sys.argv[2:]
-        else:
-            regions = list_folders('../data-preparation/resources/regions/')
-
-    elif len(sys.argv) == 1:
-        regions = list_folders('../data-preparation/resources/regions/')
+    if len(args.r) > 0: 
+        regions = args.r
+        if len(regions) == 1 and regions[0] == 'all': regions = list_folders('../data-preparation/resources/regions/')
+    else: regions = list_folders('../data-preparation/resources/regions/')
 
     details = {
         'auth': variables.final_proj_auth,

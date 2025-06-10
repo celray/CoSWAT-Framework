@@ -14,6 +14,7 @@ GitHub  : github.com/celray
 import os, sys, platform, shutil
 from cjfx import list_folders, exists, write_to, read_from, sqlite_connection, list_files, file_name, copy_file, show_progress, goto_dir, pandas, sqlite3, ignore_warnings, download_file
 import datavariables as variables
+import argparse
 
 ignore_warnings()
 
@@ -23,15 +24,28 @@ if __name__ == '__main__':
     goto_dir(__file__)
 
     # get model setup version
-    version = sys.argv[1]
+    parser = argparse.ArgumentParser(description="a terminal script for running the model setup and delineation.")
+
+    parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+    parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+
+    args = parser.parse_args()
+
+    # get model setup version
+    if args.v is None: version = variables.version
+    else: version = args.v  
+
+    # get regions
+    if len(args.r) > 0: regions = args.r
+    else: regions = list_folders(f"../model-setup/CoSWATv{version}/")
 
     if not exists(f"../model-setup/CoSWATv{version}"):
-        print(f'\t! the version CoSWATv{version} does not exist')
+        print(f'\t! the version, CoSWATv{version}, does not exist, the following versions are available:')
+        for v in list_folders('../model-setup/'):
+            if v.startswith('CoSWATv'):
+                print(f'\t\t- {v}')
+        print(f'\t> please specify a valid version using the --v argument')
         sys.exit(1)
-
-    # get regions 
-    if len(sys.argv) >= 3: regions = sys.argv[2:]
-    else: regions = list_folders("../data-preparation/resources/regions/")
 
     for region in regions:
 
@@ -190,14 +204,14 @@ if __name__ == '__main__':
 
 
         # write files
-        # db_sqlite.cursor.execute("UPDATE file_cio SET file_name = 'tem.cli' WHERE id='12';")
+        db_sqlite.cursor.execute("UPDATE file_cio SET file_name = 'tem.cli' WHERE id='12';")
         db_sqlite.close_connection()
 
         command  = f'write_files '
         command += f"--project_db_file {project_db} "
 
-        # if exists(f"{txtinout_dir}/tmp.cli"):
-            # os.remove(f"{txtinout_dir}/tmp.cli")
+        if exists(f"{txtinout_dir}/tmp.cli"):
+            os.remove(f"{txtinout_dir}/tmp.cli")
         
         os.system(command = f'{api} {command}')
 
@@ -222,6 +236,7 @@ if __name__ == '__main__':
 
         cioFileString   = "".join(cioFileContents)
 
+        write_to(cioFile, cioFileString.replace('pcp.cli           null              slr.cli', 'pcp.cli           tem.cli           slr.cli'))
         write_to(cioFile, cioFileString.replace('tmp.cli', 'tem.cli'))
         print(f'done with editor in {region}', 'SWAT+ Editor run complete')
 

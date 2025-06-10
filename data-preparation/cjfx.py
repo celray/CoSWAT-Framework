@@ -30,7 +30,6 @@ import platform
 import random
 import shutil
 import sqlite3
-import subprocess
 import sys
 import time
 from io import StringIO
@@ -1798,93 +1797,6 @@ def delete_file(file_name, v = True):
             print("\t! could not delete file {fn}".format(fn=file_name))
     else:
         if v: print("\t! the file, {fn}, does not exist".format(fn=file_name))
-
-
-def run_swat_plus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()), executable_path = '/home/cjames/Nextcloud/modules/.bins/SWATPlus64_linux' if platform.system() == "Linux" else "C:/SWAT/executables/Rev_60_5_6_64rel.exe", v = True, direct = False):
-    os.chdir(txtinout_dir)
-
-    # get the directory name without the whole path
-    base_dir = os.path.basename(os.path.normpath(txtinout_dir))
-    
-    if direct:
-        os.system(f"{executable_path}")
-    else:
-        if not v:
-            # Run the SWAT+ but ignore output and errors
-            subprocess.run([executable_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            
-            yrs_line = read_from('time.sim')[2].strip().split()
-
-            yr_from = int(yrs_line[1])
-            yr_to = int(yrs_line[3])
-
-            delta = datetime.datetime(yr_to, 12, 31) - datetime.datetime(yr_from, 1, 1)
-
-            CREATE_NO_WINDOW = 0x08000000
-
-            if platform.system() == "Windows":
-                process = subprocess.Popen(executable_path, stdout=subprocess.PIPE, creationflags=CREATE_NO_WINDOW )
-            else:
-                process = subprocess.Popen(executable_path, stdout=subprocess.PIPE)
-
-            counter = 0
-
-            current = 0
-            number_of_days = delta.days + 1
-
-            day_cycle = []
-            previous_time = None
-
-            while True:
-                line = process.stdout.readline()
-                # if "mkd" in str(line):
-                #     continue
-                line_parts = str(line).strip().split()
-                if not "Simulation" in line_parts: pass
-                elif 'Simulation' in line_parts:
-                    ref_index = str(line).strip().split().index("Simulation")
-                    year = line_parts[ref_index + 3]
-                    month = line_parts[ref_index + 1]
-                    day = line_parts[ref_index + 2]
-
-
-                    month = f"0{month}" if int(month) < 10 else month
-                    day = f"0{day}" if int(day) < 10 else day
-                    
-                    current += 1
-                    
-                    if not previous_time is None:
-                        day_cycle.append(datetime.datetime.now() - previous_time)
-
-                    if len(day_cycle) > 40:
-                        if len(day_cycle) > (7 * 365.25):
-                            del day_cycle[0]
-
-                        av_cycle_time = sum(day_cycle, datetime.timedelta()) / len(day_cycle)
-                        eta = av_cycle_time * (number_of_days - current)
-
-                        eta_str = f"  ETA - {format_timedelta(eta)}:"
-
-                    else:
-                        eta_str = ''
-
-                    show_progress(current, number_of_days, bar_length=20, string_before=f"      ", string_after= f' >> [{base_dir}] current date: {day}/{month}/{year} - final-date: 31/12/{yr_to} {eta_str}')
-
-                    previous_time = datetime.datetime.now()
-                elif "ntdll.dll" in line_parts:
-                    print("\n! there was an error running SWAT+\n")
-                if counter < 10:
-                    counter += 1
-                    continue
-
-                if len(line_parts) < 2: break
-
-            show_progress(1, 1, string_before=f"      ", string_after= f'                                                                                             ')
-            print("\n    > SWAT+ simulation complete\n")
-        
-    os.chdir(final_dir)
-
 
 def open_file_in_code(file_path):
     '''

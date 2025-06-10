@@ -1,6 +1,94 @@
 import re, geopandas, os, sys, pandas
-from ccfx import createPath, getFileBaseName, writeFile
+from ccfx import createPath, getFileBaseName, writeFile, readFile
+from cjfx import format_timedelta, show_progress
 from datetime import datetime, timedelta
+import subprocess
+
+def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
+                executable_path = '', v = True, direct = False, modelName = None):
+    os.chdir(txtinout_dir)
+
+    # get the directory name without the whole path
+    base_dir = os.path.basename(os.path.normpath(txtinout_dir))
+    
+    if direct: os.system(f"{executable_path}")
+    else:
+        if not v:
+            # Run the SWAT+ but ignore output and errors
+            subprocess.run([executable_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            
+            yrs_line = readFile('time.sim')[2].strip().split()
+
+            yr_from = int(yrs_line[1])
+            yr_to = int(yrs_line[3])
+
+            delta = datetime(yr_to, 12, 31) - datetime(yr_from, 1, 1)
+
+            CREATE_NO_WINDOW = 0x08000000
+
+            process = subprocess.Popen(executable_path, stdout=subprocess.PIPE)
+
+            counter = 0
+
+            current = 0
+            number_of_days = delta.days + 1
+
+            day_cycle = []
+            previous_time = None
+
+            while True:
+                line = process.stdout.readline()
+                # if "mkd" in str(line):
+                #     continue
+                line_parts = str(line).strip().split()
+                if not "Simulation" in line_parts:
+                    if "reading" in line_parts:
+                        if v: print(f"\r      > {str(line).strip().replace('b', '')}", end="")
+
+                elif 'Simulation' in line_parts:
+                    ref_index = str(line).strip().split().index("Simulation")
+                    year = line_parts[ref_index + 3]
+                    month = line_parts[ref_index + 1]
+                    day = line_parts[ref_index + 2]
+
+
+                    month = f"0{month}" if int(month) < 10 else month
+                    day = f"0{day}" if int(day) < 10 else day
+                    
+                    current += 1
+                    
+                    if not previous_time is None:
+                        day_cycle.append(datetime.now() - previous_time)
+
+                    if len(day_cycle) > 40:
+                        if len(day_cycle) > (7 * 365.25):
+                            del day_cycle[0]
+
+                        av_cycle_time = sum(day_cycle, timedelta()) / len(day_cycle)
+                        eta = av_cycle_time * (number_of_days - current)
+
+                        eta_str = f"  ETA - {format_timedelta(eta)}:"
+
+                    else:
+                        eta_str = ''
+                    modelNameShow = f"[{modelName}]" if not modelName is None else f""
+                    show_progress(current, number_of_days, bar_length=20, string_before=f"    ", string_after= f' {modelNameShow} >>  current: {day}/{month}/{year} - final: 31/12/{yr_to} {eta_str}')
+
+                    previous_time = datetime.now()
+                elif "ntdll.dll" in line_parts:
+                    print("\n! there was an error running SWAT+\n")
+                if counter < 10:
+                    counter += 1
+                    continue
+
+                if len(line_parts) < 2: break
+
+            show_progress(1, 1, string_before=f"      ", string_after= f'                                                                                             ')
+            print("\n    > SWAT+ simulation complete\n")
+        
+    os.chdir(final_dir)
+
 
 def isYearInFileRange(fileName, yearToCheck):
     # match all sequences of 4 digits (potential years)
@@ -163,6 +251,6 @@ def writeSWATPlusWeather(coordinates_, pointsDataFrame_, pointsDataFrameMin_, ex
     writeFile(outFileName, climateString, v = False)
     
 
-    sys.stdout.write("\r\t> wrote {0}\t".format(getFileBaseName(outFileName, extension=True)))
+    sys.stdout.write("\r\t> wrote {0}         \t".format(getFileBaseName(outFileName, extension=True)))
     sys.stdout.flush()
 

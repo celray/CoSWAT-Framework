@@ -19,6 +19,7 @@ import os
 import sys
 from cjfx import list_folders, ignore_warnings, alert
 import multiprocessing
+import argparse
 
 ignore_warnings()
 
@@ -35,23 +36,38 @@ def set_up_model(region_, version_, get_data_, period_):
     alert(f'Setting up {region_}', f'Setting up {region_}')
     if get_data_ == 'y': os.system(f'get-data.py {region_}')
 
-    os.system(f'init-model.py {version_} {region_}')
-    os.system(f'run-qswatplus.py {version_} {region_}')
-    os.system(f'edit-model.py {version_} {region_}')
+    os.system(f'init-model.py {region_} --v {version_}')
+    os.system(f'run-qswatplus.py {region_} --v {version_}')
+    os.system(f'edit-model.py {region_} --v {version_}')
 
-    os.system(f'run-model.py {version_} {period_} {region_}')
-    os.system(f'evaluate-model.py {version_} {region_}')
+    os.system(f'run-model.py {region_} --v {version_} --y {period_}')
+    os.system(f'evaluate-model.py {region_} --v {version_}')
 
 args = sys.argv
 
-# example set-up-model.py 0.4.0 n 10 africa-madagascar
-if len(sys.argv) >= 5: regions = sys.argv[4:]
-else: regions = list_folders("../data-preparation/resources/regions/")
+parser = argparse.ArgumentParser(description="a script to set up the CoSWAT-Global model for a given region")
+parser.add_argument("r", help="the name of the region to set up the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=variables.version)
+parser.add_argument("--d", help="whether to prepare data for regions. If not specified, the data will be prepared.", nargs='?', default='y')
 
-version = args[1] if len(sys.argv) >= 2 else variables.version
-get_data = args[2] if len(sys.argv) >= 3 else 'y'
+args = parser.parse_args()
 
-processes = args[3] if len(sys.argv) >= 4 else variables.processes
+# get regions
+if len(args.r) > 0: 
+    regions = args.r
+    if len(regions) == 1 and regions[0] == 'all': 
+        regions = list_folders("../data-preparation/resources/regions/")
+else:
+    regions = list_folders("../data-preparation/resources/regions/")
+
+# get model setup version
+version = args.v if args.v else variables.version
+
+# get data preparation option
+get_data = args.d if args.d else 'y'
+
+# get number of processes to use
+processes = variables.processes
 
 if __name__ == "__main__":
     
@@ -62,13 +78,8 @@ if __name__ == "__main__":
     counter = 0
     for region in regions:
         counter += 1
-        # prepare dataset
         # set data preparation options in ./data-preparation/resources/datavariables.py
         jobs.append([region, version, get_data, variables.run_period])
-
-        # alert(f'Setting up {region}', f'Setting up progress {counter} of {len(regions)}')
-        # set_up_model(region, version, get_data, variables.run_period)
-
     
     result = pool.starmap_async(set_up_model, jobs)
     result.get()
@@ -76,13 +87,6 @@ if __name__ == "__main__":
     pool.close()
 
     os.chdir(os.path.dirname(me))
-    # os.system(f'map-outputs.py {version}')
-
-
-    # from cjfx import alert
-    # alert('mapping outputs for all regions complete', 'Mapping Variables Complete')
-
-    # os.system(f'python /drive/d1/github/websites/coswat/assets/scripts/get-models.py {version} yes ')
-    # alert('server files created successfully', 'Server Files Creation Complete')
+    os.system(f'map-outputs.py --v {version}')
 
 alert('all tasks complete', 'Global Model Setup Complete')

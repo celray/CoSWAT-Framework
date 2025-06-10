@@ -39,10 +39,8 @@ print('# preparing grdc observations')
 gdf = geopandas.GeoDataFrame(metadata, geometry=geopandas.points_from_xy(metadata.long, metadata.lat), crs = "EPSG:4326")
 gdf = gdf.to_crs("{auth}:{code}".format(**details))
 
-if os.path.isfile("./resources/ws/grdc_tmp.gpkg"):
-    os.remove("./resources/ws/grdc_tmp.gpkg")
-    
-gdf.to_file("./resources/ws/grdc_tmp.gpkg", driver = "GPKG", )
+if not os.path.isfile("./resources/ws/grdc_tmp.gpkg"):
+    gdf.to_file("./resources/ws/grdc_tmp.gpkg", driver = "GPKG", )
 
 for region in regions:
     details['region'] = region

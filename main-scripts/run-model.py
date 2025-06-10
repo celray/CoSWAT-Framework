@@ -11,8 +11,9 @@ Licence : MIT
 GitHub  : github.com/celray
 '''
 
-import os, sys, platform
-from cjfx import list_all_files, exists, write_to, run_swat_plus, ignore_warnings
+import os, sys, platform, argparse
+from cjfx import list_all_files, exists, write_to, ignore_warnings, list_folders
+from coswatFX import runSWATPlus
 
 ignore_warnings()
 
@@ -25,36 +26,34 @@ from resources.print_file import print_prt
 
 if __name__ == "__main__":
 
-    args = sys.argv
+    parser = argparse.ArgumentParser(description="a script for running the model setup and delineation.")
 
-    all_models = list_all_files("../model-setup/", "qgs")
-    versions = {}
+    parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+    parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+    parser.add_argument("--y", help="the years to run the model for. If not specified, the datavariables value will be used.", nargs='?', default=None)
 
-    for model in all_models:
-        model = model.split("/")[-1].split("\\") if platform.system() == "Windows" else model.split("/")
-        v = model[0 if platform.system() == 'Windows' else 2].lower().replace('coswatv', '')
-        r = model[1 if platform.system() == 'Windows' else 3]
+    args = parser.parse_args()
 
-        if not v in versions:
-            versions[v] = []
-        
-        versions[v].append(r)
-                
-    if len(args) < 4:
-        print("please select a version years and region (...py version yrFrom-yrTo region1 region2... ). \nyou can also use '...py version yrFrom-yrTo all' to run for all regions. \nthese are available:")
-        
-        for k in versions:
-            print(f"    {v}")
-            for m in versions[k]:
-                print(f"\t- {m}")
-        
-        quit()
+    # get years
+    if args.y is None: years = variables.run_period
+    else: years = args.y
+    yr_fro, yr_to = years.split("-")
 
-    version         = args[1]
-    yr_fro, yr_to   = args[2].split("-")
-    regions         = args[3:]
+    # get model setup version
+    if args.v is None: version = variables.version
+    else: version = args.v  
 
-    if regions[0] == "all": regions = versions[version]
+    if not exists(f"../model-setup/CoSWATv{version}"):
+        print(f'\t! the version, CoSWATv{version}, does not exist, the following versions are available:')
+        for v in list_folders('../model-setup/'):
+            if v.startswith('CoSWATv'):
+                print(f'\t\t- {v}')
+        print(f'\t> please specify a valid version using the --v argument')
+        sys.exit(1)
+
+    # get regions
+    if len(args.r) > 0: regions = args.r
+    else: regions = list_folders(f"../model-setup/CoSWATv{version}/")
 
     for region in regions:
         txtDir = f"{os.path.dirname(me)}/../model-setup/CoSWATv{version}/{region}/Scenarios/Default/TxtInOut"
@@ -64,7 +63,7 @@ if __name__ == "__main__":
         if exists(f"{txtDir}/file.cio"):
             end_section = '\n' if platform.system() == 'Windows' else ''
             print(f"\n\n# running SWAT+ for {region}{end_section}")
-            run_swat_plus(txtDir, executable_path = variables.executable_path)
+            runSWATPlus(txtDir, executable_path = variables.executable_path, modelName = region)
             if platform.system() == "Windows": print()
         else:
             print(f"\n\n! cannot run SWAT+ for {region}")

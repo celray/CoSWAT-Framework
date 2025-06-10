@@ -12,7 +12,8 @@ GitHub  : github.com/celray
 '''
 
 import os, sys, platform
-from cjfx import list_folders, exists, ignore_warnings, write_to, ignore_warnings, sqlite_connection, list_files, file_name, copy_file, show_progress, goto_dir, pandas, sqlite3
+from cjfx import list_folders, exists, ignore_warnings, ignore_warnings, goto_dir, pandas
+from ccfx import createPath, deleteFile, writeFile
 import sqlalchemy
 import geopandas
 
@@ -21,6 +22,7 @@ import shutil
 import sys
 import platform
 import warnings
+import argparse
 
 ignore_warnings()
 
@@ -169,19 +171,35 @@ if __name__ == '__main__':
     # change working directory
     goto_dir(__file__)
 
+    # create argument parser
+    parser = argparse.ArgumentParser(description="a terminal version of QSWAT+ for running the model setup and delineation.")
+
+    parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+    parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+
+    args = parser.parse_args()
+
     # get model setup version
-    version = sys.argv[1]
+    if args.v is None: version = variables.version
+    else: version = args.v  
+
+    # get regions
+    if len(args.r) > 0: regions = args.r
+    else: regions = list_folders(f"../model-setup/CoSWATv{version}/")
 
     if not exists(f"../model-setup/CoSWATv{version}"):
-        print(f'\t! the version CoSWATv{version} does not exist')
+        print(f'\t! the version, CoSWATv{version}, does not exist, the following versions are available:')
+        for v in list_folders('../model-setup/'):
+            if v.startswith('CoSWATv'):
+                print(f'\t\t- {v}')
+        print(f'\t> please specify a valid version using the --v argument')
         sys.exit(1)
 
-    # get regions 
-    if len(sys.argv) >= 3: regions = sys.argv[2:]
-    else: regions = list_folders("../data-preparation/resources/regions/")
+    print(f"\nregions to run: {', '.join(regions)}")
+    print(f"CoSWAT version: {version}")
 
     for region in regions:
-
+        print(f'\n\nrunning QSWAT+ for region: {region} ({version})')
         iface   = DummyInterface()
         plugin  = QSWATPlus(iface)
         dlg     = plugin._odlg  # useful shorthand for later
@@ -232,7 +250,7 @@ if __name__ == '__main__':
 
         delin = Delineation(plugin._gv, plugin._demIsProcessed)
         delin.init()
-        delin._dlg.numProcesses.setValue(1)
+        delin._dlg.numProcesses.setValue(variables.taudemProcesses)
 
         QSWATUtils.information('DEM: {0}'.format(os.path.split(plugin._gv.demFile)[1]), True)
         delin.addHillshade(plugin._gv.demFile, None, None, None)
@@ -250,6 +268,8 @@ if __name__ == '__main__':
         rivsShapefn     = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}channel.shp')
 
         print("Running floodplain...")
+        createPath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/')
+        writeFile(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/creatingFloodPlain', 'Creating floodplain...\nThis is just an indicator file\nit will be removed when the floodplain is created')
         fxObj           = outFX('Running floodplain...')
         floodPlain      = Floodplain(plugin._gv, fxObj, 1)
         landScape       = Landscape(plugin._gv, fxObj, 1, fxObj)
@@ -259,6 +279,7 @@ if __name__ == '__main__':
 
         landScape.calcFloodplain(True, proj.layerTreeRoot())
         plugin._gv.floodFile = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/invflood0_00.tif')
+        deleteFile(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/creatingFloodPlain')
 
         print("Filtering reservoirs...")
         try:

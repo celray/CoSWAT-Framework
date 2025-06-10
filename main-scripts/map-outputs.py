@@ -19,6 +19,7 @@ GitHub  : github.com/celray
 import os
 import sys
 from cjfx import *
+import argparse
 
 ignore_warnings()
 
@@ -27,7 +28,6 @@ me = os.path.realpath(__file__)
 os.chdir(os.path.dirname(me))
 
 import datavariables as variables
-
 
 
 def make_gpkg(region, version, map_columns, map_log):
@@ -77,66 +77,71 @@ def make_gpkg(region, version, map_columns, map_log):
     return maps_gpd
 
 
-
-
-
-args = sys.argv
-
 if __name__ == "__main__":
 
-    if len(sys.argv) >= 3: regions = sys.argv[2:]
-    else: regions = list_folders("../data-preparation/resources/regions/")
+    parser = argparse.ArgumentParser(description="a terminal script for mapping the coswat models.")
 
-    version_             = args[1]
+    parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+    parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+
+    args = parser.parse_args()
+
+    # get model setup version
+    if args.v is None: version_ = variables.version
+    else: version_ = args.v  
+
+    # get regions
+    if len(args.r) > 0:
+        regions = args.r
+        if len(regions) == 1 and regions[0] == 'all':
+            regions = list_folders(f"../model-setup/CoSWATv{version_}/")
+    else: regions = list_folders(f"../model-setup/CoSWATv{version_}/")
+
+    if not exists(f"../model-setup/CoSWATv{version_}"):
+        print(f'\t! the version, CoSWATv{version_}, does not exist, the following versions are available:')
+        for v in list_folders('../model-setup/'):
+            if v.startswith('CoSWATv'):
+                print(f'\t\t- {v}')
+        print(f'\t> please specify a valid version using the --v argument')
+        sys.exit(1)
 
     map_columns_         = ["precip", "snofall", "snomlt", "surq_gen", "latq", "wateryld", "perc", "et", "ecanopy", "eplant", "esoil", "surq_cont", "cn", "sw_init", "sw_final", "sw_ave", "sw_300", "sno_init", "sno_final", "snopack", "pet", "qtile", "irr", "surq_runon", "latq_runon", "overbank", "surq_cha", "surq_res", "surq_ls", "latq_cha", "latq_res", "latq_ls", "satex", "satex_chan", "sw_change", "lagsurf", "laglatq", "lagsatex"]
-    out_shape_map_fn    = f'../model-outputs/version-{version_}/maps/shapefiles/map-data.gpkg'
+    out_shape_map_fn     = f'../model-outputs/version-{version_}/maps/shapefiles/map-data.gpkg'
 
     cumulative = None
 
-    if not exists(out_shape_map_fn):
-        variables.output_re_shape = True
+    if variables.individual_maps:
+        delete_file(out_shape_map_fn, v = False)
 
     map_log_ = write_to(f'../model-outputs/version-{version_}/maps/map.log', '', mode='o')
 
     jobs = []
-    if variables.output_re_shape:
+    if variables.individual_maps:
         for region_ in regions:
             jobs.append([region_, version_, map_columns_, map_log_])
             
-            
         # Create a multiprocessing Pool
-        with multiprocessing.Pool(20) as pool:
+        with multiprocessing.Pool(variables.processes) as pool:
             results = [pool.apply_async(make_gpkg, job) for job in jobs]
 
             for result in results:
                 maps_gpd_ = result.get() 
                 if maps_gpd_ is None: continue
-
-                if cumulative is None:
-                    cumulative = maps_gpd_
-                else:
-                    cumulative = geopandas.GeoDataFrame(pandas.concat([cumulative, maps_gpd_], ignore_index=True), geometry='geometry', crs = maps_gpd_.crs)
+                
+                if variables.remerge_maps:
+                    if cumulative is None:
+                        cumulative = maps_gpd_
+                    else:
+                        cumulative = geopandas.GeoDataFrame(pandas.concat([cumulative, maps_gpd_], ignore_index=True), geometry='geometry', crs = maps_gpd_.crs)
 
 
     else:
-        print(f'\t> reading previous cumulative output vector data')
-        cumulative = geopandas.read_file(out_shape_map_fn)
-
+        if variables.remerge_maps:
+            print(f'\t> reading previous cumulative output vector data')
+            cumulative = geopandas.read_file(out_shape_map_fn)
 
     if not cumulative is None:
-        if variables.output_re_shape:
+        if variables.remerge_maps:
             create_path(out_shape_map_fn)
             delete_file(out_shape_map_fn, v = False)
             cumulative.to_file(out_shape_map_fn)
-
-        print(f'\t> creating raster files')
-        # rasterise_columns = ["precip", "snofall", "snomlt", "surq_gen", "latq", "wateryld", "perc", "et", "ecanopy", "eplant", "esoil", "cn", "sw_init", "sw_final", "sw_ave", "snopack", "pet", "qtile", "irr", "surq_runon", "latq_runon", "overbank", "surq_cha", "surq_res", "latq_cha", "latq_res", "latq_ls", "satex", "sw_change", "lagsurf", "laglatq"]
-        rasterise_columns = ["precip", "snofall", "snomlt", "surq_gen", "latq", "wateryld", "perc", "et", "ecanopy", "eplant", "esoil", "cn", "sw_init", "sw_final", "sw_ave", "snopack", "pet"]
-        for col_name in rasterise_columns:
-            out_raster = f'../model-outputs/version-{version_}/maps/raster-maps/{col_name}.tif'
-            print(f'\t - {out_raster}')
-            create_path(out_raster)
-            rasterise_shape(out_shape_map_fn, col_name, out_raster, f'../data-preparation/dem-ws/aster/global-aster.tif')
-        
-        

@@ -53,16 +53,12 @@ print('\n# preparing climate data...\n')
 
 if __name__ == "__main__":
 
-    currentVariables = {}
-
     counter = 0
+    skipWeatherDownload = False
     while exists(f'{weatherDir}/download/downloadLock'):
-        print("  > waiting for download lock to be released...")
         time.sleep(5)
-        counter += 1
-        if counter > 120:
-            print("  > download lock not released after 10 minutes, exiting...")
-            sys.exit(1)
+        print(f"\r  > waiting for download lock to be released... ({counter * 5} seconds)", end=""); sys.stdout.flush()
+        counter += 1; skipWeatherDownload = True
 
     writeFile(f'{weatherDir}/download/downloadLock', 'locked')
 
@@ -73,10 +69,13 @@ if __name__ == "__main__":
                 data.append([latitude, longitude])
 
         cols = ['longitude', 'latitude']
-        if exists(variables.weather_points_all):deleteFile(variables.weather_points_all)
-        pointsToGeodataframe(data, out_shape=variables.weather_points_all, columns=cols)
 
-        print(f"  > created points file: {variables.weather_points_all}")
+        if variables.redo_weather:
+                deleteFile(variables.weather_points_all)
+
+        if not exists(variables.weather_points_all):
+            pointsToGeodataframe(data, out_shape=variables.weather_points_all, columns=cols)
+            print(f"  > created points file: {variables.weather_points_all}")
 
     # loop through scenarios
     for scenario in variables.available_scenarios:
@@ -86,6 +85,8 @@ if __name__ == "__main__":
         gcms = variables.weather_pr_links_list[scenario]
 
         for gcm in gcms:
+            currentVariables = {}
+
             print(f"  > processing gcm: {gcm}")
 
             if not exists(f"./resources/weather-lists/"):
@@ -134,12 +135,23 @@ if __name__ == "__main__":
             
             # download weather
             createPath(f'{weatherDir}/download/{scenario}/')
-            pool = multiprocessing.Pool(variables.processes)
+            # pool = multiprocessing.Pool(variables.processes)
 
-            results = pool.starmap_async(downloadFile, downloadList)
-            results.get()
+            # results = pool.starmap_async(downloadFile, downloadList)
+            # results.get()
 
-            pool.close()
+            # pool.close()
+
+            if variables.weather_redownload:
+                for link in downloadList:
+                    print(f"  > downloading \n\t-{link[0]} \n\t-to {link[1]}")
+                    # we will use wget to download the files
+                    command = f"wget -c -P {link[1]} {link[0]} --no-check-certificate"
+                    if link[2] == "resume":
+                        command += " --continue -q --show-progress"
+                    if link[3] == 2:
+                        command += " --retry-connrefused --tries=2"
+                    if not skipWeatherDownload: os.system(command)
             print()
 
             if exists(f'{weatherDir}/download/downloadLock'):

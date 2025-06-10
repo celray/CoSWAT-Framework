@@ -2,6 +2,7 @@
 
 import os
 import sys
+import argparse
 
 import hydroeval
 from cjfx import (create_path, distance, exists, geopandas, list_all_files,
@@ -23,44 +24,29 @@ warnings.filterwarnings('ignore')
 
 if __name__ == "__main__":
         
-    args = sys.argv
+    # get model setup version
+    parser = argparse.ArgumentParser(description="a script for evaluating models.")
 
-    all_models = list_all_files("../model-setup/", "qgs")
-    if len(sys.argv) >= 3: regions = sys.argv[2:]
-    else: regions = list_folders("../data-preparation/resources/regions/")
+    parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
+    parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
 
-    if len(args) < 2:
-        versions = {}
+    args = parser.parse_args()
+    
+    # get model setup version
+    if args.v is None: version = variables.version
+    else: version = args.v  
 
-        for model in all_models:
-            model = model.replace('\\\\', '/')
-            model = model.replace('\\', '/')
-            model = model.split("/")[-3:]
-            
-            v = model[0].lower().replace('coswatv', '')
-            r = model[1]
+    # get regions
+    if len(args.r) > 0: regions = args.r
+    else: regions = list_folders(f"../model-setup/CoSWATv{version}/")
 
-            if not v in versions:
-                versions[v] = []
-            
-            versions[v].append(r)
-                
-        print("please select a version and region (...py version region). these are available:")
-        
-        for k in versions:
-            print(f"    {v}")
-            for m in versions[k]:
-                print(f"\t- {m}")
-        
-        quit()
-
-    version     = args[1]
-    # regions     = args[2:]
-
-    if regions[0].lower() == "all":
-        regions = list_folders(f'../model-setup/CoSWATv{version}/')
-
-    print(f'\n# evaluating {len(regions)} model{"" if len(regions) == 1 else "s"} from CoSWATv{version}')
+    if not exists(f"../model-setup/CoSWATv{version}"):
+        print(f'\t! the version, CoSWATv{version}, does not exist, the following versions are available:')
+        for v in list_folders('../model-setup/'):
+            if v.startswith('CoSWATv'):
+                print(f'\t\t- {v}')
+        print(f'\t> please specify a valid version using the --v argument')
+        sys.exit(1)
 
     for region in regions:
 
