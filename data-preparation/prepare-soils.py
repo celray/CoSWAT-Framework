@@ -81,6 +81,7 @@ if __name__ == "__main__":
     for region in regions:
         details['region'] = region
 
+        create_path(variables.fao_final_raster.format(**details))
         print(f'\t# setting bounds to  {variables.cutline.format(**details)}')
         ds = gdal.Warp(variables.fao_final_raster.format(**details),
                        variables.fao_tmp_raster,

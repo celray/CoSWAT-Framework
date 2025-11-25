@@ -150,7 +150,7 @@ template_string = '''<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
         <useLeftRight type="int">0</useLeftRight>
       </lsu>
       <params>
-        <burninDepth type="int">100</burninDepth>
+        <burninDepth type="int">{burnInDepth}</burninDepth>
         <channelDepthExponent type="double">0.4</channelDepthExponent>
         <channelDepthMultiplier type="double">0.13</channelDepthMultiplier>
         <channelWidthExponent type="double">0.6</channelWidthExponent>

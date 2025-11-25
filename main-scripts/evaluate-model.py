@@ -152,6 +152,16 @@ if __name__ == "__main__":
         lookup_string = "grdc_id,channel\n"
         for id in outlet_closest_channels:
             lookup_string += f"{outlet_closest_stations[id]},{outlet_closest_channels[id]},"
+            grdc_ts_fn = f"../model-data/{region}/observations/{outlet_closest_stations[id]}.csv"
+            if exists(grdc_ts_fn):
+                lookup_string += f"available\n"
+            else:
+                lookup_string += f"null\n"
+        write_to(f'{model_dir}/Evaluation/Text/grdcObservationsLookup.csv', lookup_string)
+        
+        lookup_string = "grdc_id,channel\n"
+        for id in outlet_closest_channels:
+            lookup_string += f"{outlet_closest_stations[id]},{outlet_closest_channels[id]},"
 
             report(f'\t> processing channel {outlet_closest_channels[id]}                                                   ')
             # read grdc and swat_output

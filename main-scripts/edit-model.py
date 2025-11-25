@@ -191,16 +191,20 @@ if __name__ == '__main__':
 
         os.system(command = f'{api} {command}')
 
-        command  = f'import_weather '
 
-        command += f"--project_db_file {project_db} "
-        command += f"--delete_existing y "
-        command += f"--create_stations y "
-        command += f"--import_type observed "
-        command += f"--editor_version {editor_version} "
-        command += f"--weather_import_format plus "
-        command += f"--weather_dir {weather_dir} "
-        os.system(command = f'{api} {command}')
+        if not variables.use_netcdf:
+            command  = f'import_weather '
+
+            command += f"--project_db_file {project_db} "
+            command += f"--delete_existing y "
+            command += f"--create_stations y "
+            command += f"--import_type observed "
+            command += f"--editor_version {editor_version} "
+            command += f"--weather_import_format plus "
+            command += f"--weather_dir {weather_dir} "
+            os.system(command = f'{api} {command}')
+        else:
+            pass
 
 
         # write files
@@ -236,7 +240,7 @@ if __name__ == '__main__':
 
         cioFileString   = "".join(cioFileContents)
 
-        write_to(cioFile, cioFileString.replace('pcp.cli           null              slr.cli', 'pcp.cli           tem.cli           slr.cli'))
+        write_to(cioFile, cioFileString.replace('pcp.cli           null', 'pcp.cli           tem.cli'))
         write_to(cioFile, cioFileString.replace('tmp.cli', 'tem.cli'))
         print(f'done with editor in {region}', 'SWAT+ Editor run complete')
 

@@ -17,11 +17,11 @@ GitHub  : github.com/celray
 
 import os
 import sys
-from cjfx import list_folders, ignore_warnings, alert
+from ccfx import listFolders, ignoreWarnings
 import multiprocessing
 import argparse
 
-ignore_warnings()
+ignoreWarnings()
 
 # change working directory
 me = os.path.realpath(__file__)
@@ -33,7 +33,7 @@ def set_up_model(region_, version_, get_data_, period_):
     '''
     This function coordinates the setup of the COmmunity SWAT+ Model
     '''
-    alert(f'Setting up {region_}', f'Setting up {region_}')
+    print(f'Setting up {region_}')
     if get_data_ == 'y': os.system(f'get-data.py {region_}')
 
     os.system(f'init-model.py {region_} --v {version_}')
@@ -56,9 +56,9 @@ args = parser.parse_args()
 if len(args.r) > 0: 
     regions = args.r
     if len(regions) == 1 and regions[0] == 'all': 
-        regions = list_folders("../data-preparation/resources/regions/")
+        regions = listFolders("../data-preparation/resources/regions/")
 else:
-    regions = list_folders("../data-preparation/resources/regions/")
+    regions = listFolders("../data-preparation/resources/regions/")
 
 # get model setup version
 version = args.v if args.v else variables.version
@@ -89,4 +89,4 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(me))
     os.system(f'map-outputs.py --v {version}')
 
-alert('all tasks complete', 'Global Model Setup Complete')
+print('all tasks complete', 'Global Model Setup Complete')

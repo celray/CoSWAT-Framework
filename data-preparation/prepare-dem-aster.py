@@ -96,22 +96,23 @@ if __name__ == "__main__":
 
     allTiles = [os.path.abspath(fn) for fn in (local_tiles + remote_tiles)]
 
-    # now we will build a virtual raster file
-    if len(allTiles) == 0:
-        print('! no tiles found, exiting')
-        sys.exit()
-
-    # we then create a vrt
-    vrt_output_path = f"{variables.aster_download_tiles_dir}/../global-aster.vrt"
-    if not exists(vrt_output_path):
-        print(f'\t> creating vrt from tiles')
-        vrt = gdal.BuildVRT(vrt_output_path, allTiles, callback=progressCallback, callback_data=None)
-        if vrt is None:
-            raise RuntimeError("Failed to create VRT")
-        vrt = None
-
     # re-resample
     if variables.re_resample:
+
+        # now we will build a virtual raster file
+        if len(allTiles) == 0:
+            print('! no tiles found, exiting')
+            sys.exit()
+
+        # we then create a vrt
+        vrt_output_path = f"{variables.aster_download_tiles_dir}/../global-aster.vrt"
+        if not exists(vrt_output_path):
+            print(f'\t> creating vrt from tiles')
+            vrt = gdal.BuildVRT(vrt_output_path, allTiles, callback=progressCallback, callback_data=None)
+            if vrt is None:
+                raise RuntimeError("Failed to create VRT")
+            vrt = None
+            
         print(f'\n\t> resampling tiles to {variables.data_resolution} m')
         try:
             gdal.Warp(

@@ -1,3 +1,15 @@
 #!/bin/bash 
 
-docker run -it --network host -v "$(pwd):/CoSWAT-Global-Model" coswat
+# Get current user information
+CURRENT_USER=$(whoami)
+CURRENT_UID=$(id -u)
+CURRENT_GID=$(id -g)
+
+# Run container with user mapping for better security
+docker run -it --network host \
+    -v "$(pwd):/CoSWAT-Global-Model" \
+    --user $CURRENT_UID:$CURRENT_GID \
+    -e USER=$CURRENT_USER \
+    -e HOME=/home/$CURRENT_USER \
+    -w /CoSWAT-Global-Model \
+    coswat

@@ -27,7 +27,7 @@ def distance(coords_a, coords_b):
 
 def report(string, printing=False):
     if printing:
-        print(f"\t> {string}")
+        print(f"  > {string}")
     else:
         sys.stdout.write("\r" + string)
         sys.stdout.flush()
@@ -180,7 +180,7 @@ grdc_point_gdf['min_dist_to_lines'] = grdc_point_gdf.geometry.apply(min_distance
 
 re_evaluate = True
 
-print('\n\t> dropping points')
+print(f'\n  > dropping points [{region}]')
 checked_indices = []
 while re_evaluate:
     re_evaluate = False
@@ -198,8 +198,7 @@ while re_evaluate:
 grdc_point_gdf['X'] = grdc_point_gdf.geometry.x
 grdc_point_gdf['Y'] = grdc_point_gdf.geometry.y
 
-
-print(f'\n\t> removing points that are too close to another')
+print(f'\n  > removing points that are too close to another [{region}]')
 # get closest points
 kept_points    = []
 skipped_points  = []
@@ -242,7 +241,7 @@ grdc_point_gdf.reset_index(inplace=True)
 channels_gdf.reset_index(inplace=True)
 
 
-print('\t> attaching points to channels')
+print(f'  > attaching points to channels [{region}]')
 # find cloest feature
 
 close_features = {}
@@ -264,7 +263,7 @@ for index, row in grdc_point_gdf.iterrows():
 
 outlet_snap_data = []
 
-print('\t> snapping points to channels safely')
+print(f'  > snapping points to channels safely [{region}]')
 for index in close_features:
     ref_x, ref_y = grdc_point_gdf.loc[index,:].geometry.coords.xy
 
@@ -300,12 +299,15 @@ for index in close_features:
 point_data = points_to_geodataframe(outlet_snap_data + points, auth = proj_auth, code = proj_code, out_shape = f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets_tmp.gpkg')
 
 # print()
+points_template_gdf["canDrop"] = "Yes"
 counter = 1
 for index, row in point_data.iterrows():
 
     report(f"processing point {index}       ")
     
-    new_row = {'PTSOURCE':0, 'RES': 0, 'INLET': 0, 'ID': counter, 'PointId': counter, 'geometry': row['geometry']}
+    new_row = {'PTSOURCE':0, 'RES': 0, 'INLET': 0, 'ID': counter, 'PointId': counter, 'geometry': row['geometry'], 'canDrop': 'Yes'}
+    if counter >= len(points_template_gdf):
+        new_row['canDrop'] = "No"
     new_row_df = pandas.DataFrame([new_row])
 
     points_template_gdf = geopandas.GeoDataFrame(pandas.concat([points_template_gdf, new_row_df], ignore_index=True), crs = points_template_gdf.crs, geometry='geometry')
@@ -317,6 +319,34 @@ for index, row in point_data.iterrows():
 
     counter += 1
 
+print(f'\n  > removing points that are too close to each other (within {variables.data_resolution / 1000}m) [{region}]')
+# Remove points that are within 1 kilometer of each other
+points_to_remove = []
+for i, row_i in points_template_gdf.iterrows():
+    if i in points_to_remove:
+        continue
+    
+    for j, row_j in points_template_gdf.iterrows():
+        if i >= j or j in points_to_remove:
+            continue
+        
+        # Calculate distance between points
+        dist = row_i.geometry.distance(row_j.geometry)
+        if dist < (variables.data_resolution / 1000):  # within the defined resolution
+            if (row_j.canDrop == "Yes") and (row_i.canDrop == "Yes"):
+                points_to_remove.append(j)
+                report(f"removing point {j} (too close to point {i})       ")
+
+# instead of removing randomly like above, use point with higher catchment area
+
+
+
+
+# Remove the identified points
+points_template_gdf = points_template_gdf.drop(points_to_remove).reset_index(drop=True)
+
+
+
 points_template_gdf.crs = f"{proj_auth}:{proj_code}".lower()
 
 lakesFN                 = geopandas.read_file(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakes-grand-{proj_auth}-{proj_code}.shp')
@@ -325,6 +355,27 @@ union_buffer            = buffered_polygons.unary_union    # Combine all buffere
 
 # Select points that are not within the buffered area
 points_template_gdf = points_template_gdf[~points_template_gdf.geometry.within(union_buffer)]
+
+# remove points that are within 1m distance of each other.
+points_to_remove_1m = []
+for i, row_i in points_template_gdf.iterrows():
+    if i in points_to_remove_1m:
+        continue
+    
+    for j, row_j in points_template_gdf.iterrows():
+        if i >= j or j in points_to_remove_1m:
+            continue
+        
+        # Calculate distance between points
+        dist = row_i.geometry.distance(row_j.geometry)
+        if dist < 1:  # within 1 meter
+            points_to_remove_1m.append(j)
+            report(f"removing point {j} (within 1m of point {i})       ")
+
+# Remove the identified points
+points_template_gdf = points_template_gdf.drop(points_to_remove_1m).reset_index(drop=True)
+
+
 
 points_template_gdf.to_file(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets.shp', driver = 'ESRI Shapefile')
 print()

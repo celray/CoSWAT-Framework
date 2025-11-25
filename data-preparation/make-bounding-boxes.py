@@ -79,7 +79,7 @@ if __name__ == '__main__':
                 "./resources/CoSWAT-GM-world-land-masses-{auth}-{code}.gpkg".format(**details),
                 "./resources/regions/{region}/land_mass-{auth}-{code}.gpkg".format(**details),
             )
-        clip_features("./resources/regions/{region}/land_mass-{auth}-{code}.gpkg".format(**details), "resources/burn_shape-{auth}-{code}.shp".format(**details), "../model-data/{region}/shapes/burn-shape-{auth}-{code}.shp".format(**details))
+        clip_features("./resources/regions/{region}/land_mass-{auth}-{code}.gpkg".format(**details), "resources/burn_shape-{auth}-{code}.gpkg".format(**details), "../model-data/{region}/shapes/burn-shape-{auth}-{code}.shp".format(**details))
 
     print()
     print()

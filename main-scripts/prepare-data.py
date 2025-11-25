@@ -22,7 +22,7 @@ os.chdir(os.path.dirname(me))
 
 if len(sys.argv) >= 2: regions = sys.argv[1:]
 else: regions = listFolders("../data-preparation/resources/regions/")
-regions = [region for region in regions if not "test" in region]  # exclude global region
+# regions = [region for region in regions if not "test" in region]  # exclude global region
 
 regions_ = ' '.join(regions)
 

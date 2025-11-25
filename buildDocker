@@ -1,3 +1,16 @@
 #!/bin/bash 
 
-docker buildx build --network host -t coswat --progress=plain .
+# Get current user information for building with fallbacks
+CURRENT_USER=${USER:-$(whoami)}
+CURRENT_UID=$(id -u 2>/dev/null || echo "1000")
+CURRENT_GID=$(id -g 2>/dev/null || echo "1000")
+
+echo "Building Docker image for user: $CURRENT_USER (UID:$CURRENT_UID, GID:$CURRENT_GID)"
+
+# Build Docker image with user arguments
+docker buildx build --network host \
+    --build-arg USERNAME="$CURRENT_USER" \
+    --build-arg UID="$CURRENT_UID" \
+    --build-arg GID="$CURRENT_GID" \
+    -t coswat \
+    --progress=plain .

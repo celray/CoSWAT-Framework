@@ -59,3 +59,5 @@ data-preparation/resources/login.py
 data-preparation/resources/swatplus_wgn.zip
 /data-preparation/dem-ws
 /.vscode
+tmpEXE/.vscode/AGENTS.md
+tmpEXE/.github/copilot-instructions.md

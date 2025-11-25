@@ -90,31 +90,21 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
     os.chdir(final_dir)
 
 
-def isYearInFileRange(fileName, yearToCheck):
-    # match all sequences of 4 digits (potential years)
-    possibleYears = re.findall(r'(?<!\d)(\d{4})(?!\d)', fileName)
-    
-    if len(possibleYears) < 2:
-        raise ValueError("Could not find two years in the file name.")
-
-    # convert to integers and sort
-    possibleYears = sorted([int(year) for year in possibleYears])
-    startYear, endYear = possibleYears[0], possibleYears[-1]
-
-    return startYear <= int(yearToCheck) <= endYear
-
-
 def shouldKeep(baseFn, runPeriod):
     """Determines if a file should be downloaded based on year ranges."""
 
-    def yearInRange(year_range, baseFn):
-        start_year, end_year = map(int, year_range.split('-'))
-        return isYearInFileRange(baseFn, start_year) or isYearInFileRange(baseFn, end_year)
+    start_year, end_year = map(int, runPeriod.split('-'))
+    possibleYears = re.findall(r'(?<!\d)(\d{4})(?!\d)', baseFn)
 
-    if yearInRange(runPeriod, baseFn):
-        return True
+    fileStart, fileEnd = sorted([int(year) for year in possibleYears])
+    
+    shouldKeepFile = False
 
-    return False 
+    if (start_year <= fileStart <= end_year) or (start_year <= fileEnd <= end_year):
+        shouldKeepFile = True
+
+    return shouldKeepFile
+
 
 
 def clipFeatures(inputFeaturePath:str, boundaryFeature:str, outputFeature:str, keepOnlyTypes = None, v = False) -> geopandas.GeoDataFrame:

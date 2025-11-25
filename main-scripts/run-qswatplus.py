@@ -11,9 +11,11 @@ Licence : MIT
 GitHub  : github.com/celray
 '''
 
-import os, sys, platform
+import os, sys, platform, math
+
+import shapely
 from cjfx import list_folders, exists, ignore_warnings, ignore_warnings, goto_dir, pandas
-from ccfx import createPath, deleteFile, writeFile
+from ccfx import createPath, deleteFile, writeFile, unzipFile
 import sqlalchemy
 import geopandas
 
@@ -117,6 +119,18 @@ class outFX:
         """
         self.append(message)
 
+    def textColor(self) -> None:
+        """
+        Set the text color.
+        """
+        pass
+
+    def setTextColor(self, color) -> None:
+        """
+        Set the text color.
+        """
+        pass
+
 
 import atexit
 
@@ -199,6 +213,9 @@ if __name__ == '__main__':
     print(f"CoSWAT version: {version}")
 
     for region in regions:
+        details['version'] = version
+        details['region']  = region
+
         print(f'\n\nrunning QSWAT+ for region: {region} ({version})')
         iface   = DummyInterface()
         plugin  = QSWATPlus(iface)
@@ -255,7 +272,11 @@ if __name__ == '__main__':
         QSWATUtils.information('DEM: {0}'.format(os.path.split(plugin._gv.demFile)[1]), True)
         delin.addHillshade(plugin._gv.demFile, None, None, None)
         QSWATUtils.information('Inlets/outlets file: {0}'.format(os.path.split(plugin._gv.outletFile)[1]), True)
-
+        
+        if not exists(f"../data-preparation/resources/regions/"):
+            print("Extracting regions resources...")
+            unzipFile('../data-preparation/resources/regions.zip', '../data-preparation/resources')
+        
         outlets_buffer_gpd  = geopandas.read_file(f"../data-preparation/resources/regions/{region}/outlets-buffer.gpkg").to_crs('{auth}:{code}'.format(**details))
         
         delin.runTauDEM2(ver = version, reg = region,
@@ -263,68 +284,37 @@ if __name__ == '__main__':
             Mask_gpd    = outlets_buffer_gpd,
             sel_file    = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets_sel.shp')
         )
-
+        
         lakesShapefn    = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp')
         rivsShapefn     = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}channel.shp')
 
-        print("Running floodplain...")
-        createPath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/')
-        writeFile(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/creatingFloodPlain', 'Creating floodplain...\nThis is just an indicator file\nit will be removed when the floodplain is created')
-        fxObj           = outFX('Running floodplain...')
-        floodPlain      = Floodplain(plugin._gv, fxObj, 1)
-        landScape       = Landscape(plugin._gv, fxObj, 1, fxObj)
+        os.system(f'python3 dodge-vertices.py {region} --v {version}')
 
-        landScape.clipperFile = plugin._gv.subbasinsFile
-        landScape.calcHillslopes(variables.thresholdCh, landScape.clipperFile, proj.layerTreeRoot())
+        if variables.run_flood_plains:
+            print(f"Running floodplain... [{region}]")
+            createPath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/')
+            writeFile(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/creatingFloodPlain', 'Creating floodplain...\nThis is just an indicator file\nit will be removed when the floodplain is created')
+            fxObj           = outFX('Running floodplain...')
+            floodPlain      = Floodplain(plugin._gv, fxObj, 1)
+            landScape       = Landscape(plugin._gv, fxObj, 1, fxObj)
 
-        landScape.calcFloodplain(True, proj.layerTreeRoot())
-        plugin._gv.floodFile = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/invflood0_00.tif')
-        deleteFile(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/creatingFloodPlain')
-
-        print("Filtering reservoirs...")
-        try:
-            clippedReservoirs = geopandas.read_file(lakesShapefn)
-            streams = geopandas.read_file(rivsShapefn)
-
-            # save a copy of the original reservoirs
-            clippedReservoirs.to_file(os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakesOriginal.shp'))
-            streams.to_file(os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/rivsOriginal.shp'))
-
-            # Ensure both datasets are in the same CRS
-            if clippedReservoirs.crs != streams.crs:
-                streams = streams.to_crs(clippedReservoirs.crs)
-
-            # Perform spatial join to find polygons that intersect with any line in streams
-            intersecting = geopandas.sjoin(clippedReservoirs, streams, how="inner", predicate="intersects")
-
-            # Get the indices of intersecting polygons
-            intersecting_indices = intersecting.index.unique()
-
-            # Remove the intersecting polygons from clippedReservoirs
-            clippedReservoirs = clippedReservoirs[clippedReservoirs.index.isin(intersecting_indices)]
-
-            lakesGDF = clippedReservoirs
-            lakes_to_remove = []
-
-            for index, stream in streams.iterrows():
-                start_point = Point(stream['geometry'].coords[0])
-                end_point = Point(stream['geometry'].coords[-1])
-                line = stream['geometry']
-                
-                for lake_index, lake in lakesGDF.iterrows():
-                    if lake.geometry.contains(end_point) and not lake.geometry.contains(start_point):
-                        
-                        intersections = count_intersections(line, lake.geometry)
-                        if intersections >= 2: lakes_to_remove.append(lake_index)
-
-            # Remove the identified lakes
-            lakesGDF = lakesGDF.drop(lakes_to_remove)
-            lakesGDF.to_file(lakesShapefn)
-        except:
-            print("Error filtering reservoirs - will not be used in the model")
-            raise
+            landScape.numProcesses  = variables.taudemProcesses
+            landScape.clipperFile   = plugin._gv.subbasinsFile
             
+            print(f"   > calculating hillslopes [{region}]")
+            landScape.calcHillslopes(variables.floodPlainDemInvThres, landScape.clipperFile, proj.layerTreeRoot())
+
+            print(f"   > calculating floodplain [{region}]")
+            landScape.calcFloodplainParallel(True, proj.layerTreeRoot(), variables.taudemProcesses)
+            plugin._gv.floodFile = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/invflood0_00.tif')
+        
+        else:
+            print("Floodplains skipped...")
+        
+        # NOTE: resolve-lakes-reservoirs.py call removed - to be replaced with improved algorithm
+
         delin.finishDelineation()
+        deleteFile(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/Landscape/Flood/creatingFloodPlain')
 
         if not dlg.hrusButton.isEnabled():
             QSWATUtils.error('\t ! HRUs button not enabled', True)
@@ -334,6 +324,7 @@ if __name__ == '__main__':
         hrus.init()
         hrus._gv.useLandscapes = True
         hrus._dlg.generateFullHRUs.setEnabled(True)
+        # hrus._dlg.channelMergeVal.setText(str(5))
         hrus.fullHRUsWanted = True
         hrus.initFloodplain()
         hrus.readFiles()

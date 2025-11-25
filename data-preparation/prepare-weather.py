@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os, sys
+from datetime import datetime
 from ccfx import *
 import datavariables as variables
 from coswatFX import shouldKeep, writeSWATPlusWeather
@@ -18,7 +19,7 @@ details         = {
 extTypes         = ["tem", "pcp", "slr", "hmd", "wnd", ]
 
 varNames         = {'pcp': ['pr',],
-                    'tem': ['tasmax', 'tasmin'],
+                    'tem': ['tasmax',], # 'tasmin'],
                     'wnd': ['wnd', 'sfcwind', 'sfcWind', 'wind'],
                     'hmd': ['hurs', 'rhs'],
                     'slr': ['rlds',]}
@@ -28,6 +29,12 @@ fullVarNames     = {'pcp': "precipitation",
                     'wnd': "wind speed",
                     'hmd': "relative humidity",
                     'slr': "solar radiation"}
+
+varUnits         = {'pcp': "mm/day",
+                    'tem': "K",
+                    'wnd': "m/s",
+                    'hmd': "%",
+                    'slr': "W/m^2"}
 
 varFactors       = {'pcp': 86400.0000,
                     'tem':  -273.1500,
@@ -50,6 +57,23 @@ else:
 
 print('\n# preparing climate data...\n')
 
+def pointsToGeodataframe(point_pairs_list, columns = ['latitude', 'longitude'], auth = "EPSG", code = '4326', out_shape = '', format = 'gpkg', v = False, get_geometry_only = False):
+    df = pandas.DataFrame(point_pairs_list, columns = columns)
+    geometry = [Point(xy) for xy in zip(df['latitude'], df['longitude'])]
+
+    if get_geometry_only:
+        return geometry[0]
+
+    gdf = geopandas.GeoDataFrame(point_pairs_list, columns = columns, geometry=geometry)
+    drivers = {'gpkg': 'GPKG', 'shp': 'ESRI Shapefile'}
+
+    gdf = gdf.set_crs(f'{auth}:{code}')
+    
+    if out_shape != '':
+        if v: print(f'creating shapefile {out_shape}')
+        gdf.to_file(out_shape, driver=drivers[format])
+    
+    return gdf
 
 if __name__ == "__main__":
 
@@ -59,8 +83,6 @@ if __name__ == "__main__":
         time.sleep(5)
         print(f"\r  > waiting for download lock to be released... ({counter * 5} seconds)", end=""); sys.stdout.flush()
         counter += 1; skipWeatherDownload = True
-
-    writeFile(f'{weatherDir}/download/downloadLock', 'locked')
 
     if variables.prepare_weather:
         data = []
@@ -76,7 +98,10 @@ if __name__ == "__main__":
         if not exists(variables.weather_points_all):
             pointsToGeodataframe(data, out_shape=variables.weather_points_all, columns=cols)
             print(f"  > created points file: {variables.weather_points_all}")
+    else:
+        quit()
 
+    writeFile(f'{weatherDir}/download/downloadLock', 'locked')
     # loop through scenarios
     for scenario in variables.available_scenarios:
         print(f"processing scenario: {scenario}")
@@ -210,7 +235,8 @@ if __name__ == "__main__":
                 croppedRegionFiles = listFiles(dstDirCropped, 'nc')
                 croppedRegionFiles += listFiles(dstDirCropped, 'nc4')
 
-                dstDirMerged = f"{weatherDir}/merged/{region}"
+                dstDirMerged = f"{weatherDir}/time-merged/{region}"
+                netcdfUnitsFix = f"{weatherDir}/netcdf-unit-conversion/{region}"
                 dstDirTxt = f"{weatherDir}/text/{region}"
 
                 jobsMerge = []
@@ -228,10 +254,14 @@ if __name__ == "__main__":
                                     break
                         
                     for fname in croppedRegionFiles:
-                        if currentVariables[extType] in fname:
+                        if extType == "tem":
+                            if "tasmax" in fname:
+                                mergeTimeFiles.append(fname)
+                            if "tasmin" in fname:
+                                mergeTimeFilesMin.append(fname)
+
+                        elif currentVariables[extType] in fname:
                             mergeTimeFiles.append(fname)
-                        if extType == "tem" and "tasmin" in fname:
-                            mergeTimeFilesMin.append(fname)
 
                     if len(mergeTimeFiles) == 0: continue
                     
@@ -267,72 +297,131 @@ if __name__ == "__main__":
                 for index, row in regionPoints.iterrows():
                     selectedCoordinates.append(f"{row['geometry'].x},{row['geometry'].y},{extractRasterValue(variables.aster_tmp_tif, row['geometry'].y, row['geometry'].x)}")
                 
-                for extType in extTypes:
-                    if not extType in currentVariables:
-                        print(f"  > no variable found for {extType}")
-                        continue
+                if variables.use_netcdf:
+                    createPath(netcdfUnitsFix)
+                    unitJobs    = []
+                    unitNames   = []
+                    mergerNames = []
+                    for extType in extTypes:
+                        timeMerged = f"{dstDirMerged}/{scenario}_{gcm}_{currentVariables[extType]}.nc4"
+                        if not exists(timeMerged):
+                            print(f"  > file not found: {timeMerged}")
+                            raise FileNotFoundError(f"File not found: {timeMerged}")
+                        
+                        if ("tasmax" in timeMerged):
+                            command1 = f"cdo -expr,'tasmax=tasmax+{varFactors[extType]}' {timeMerged} {netcdfUnitsFix}/unit_{scenario}_{gcm}_tasmax.nc4"
+                            command2 = f"cdo -expr,'tasmin=tasmin+{varFactors[extType]}' {timeMerged.replace('tasmax', 'tasmin')} {netcdfUnitsFix}/unit_{scenario}_{gcm}_tasmin.nc4"
 
-                    mergedFileName = f"{dstDirMerged}/{scenario}_{gcm}_{currentVariables[extType]}.nc4"
-                    if not exists(mergedFileName):
-                        print(f"  > file not found: {mergedFileName}")
-                        continue
+                            commandN1 = f"cdo -setattribute,tmax@units=\"deC\" -chname,tasmax,tmax -setmissval,-99 {netcdfUnitsFix}/unit_{scenario}_{gcm}_tasmax.nc4 {netcdfUnitsFix}/name_{scenario}_{gcm}_tmax.nc4"
+                            commandN2 = f"cdo -setattribute,tmin@units=\"deC\" -chname,tasmin,tmin -setmissval,-99 {netcdfUnitsFix}/unit_{scenario}_{gcm}_tasmin.nc4 {netcdfUnitsFix}/name_{scenario}_{gcm}_tmin.nc4"
+
+                            unitJobs.append(command1); unitJobs.append(command2)  
+                            unitNames.append(commandN1); unitNames.append(commandN2)
+                            mergerNames.append(f"{netcdfUnitsFix}/name_{scenario}_{gcm}_tmin.nc4")
+                            mergerNames.append(f"{netcdfUnitsFix}/name_{scenario}_{gcm}_tmax.nc4")
+
+                        else:
+                            command1 = f"cdo -expr,'{currentVariables[extType]}={currentVariables[extType]}*{varFactors[extType]}' {timeMerged} {netcdfUnitsFix}/unit_{scenario}_{gcm}_{currentVariables[extType]}.nc4"
+                            commandN1 = f"cdo -setattribute,{extType}@units=\"{varUnits[extType]}\" -chname,{currentVariables[extType]},{extType} -setmissval,-99 {netcdfUnitsFix}/unit_{scenario}_{gcm}_{currentVariables[extType]}.nc4 {netcdfUnitsFix}/name_{scenario}_{gcm}_{extType}.nc4"
+
+                            unitJobs.append(command1)
+                            unitNames.append(commandN1)
+                            mergerNames.append(f"{netcdfUnitsFix}/name_{scenario}_{gcm}_{extType}.nc4")
+
+                    print(f"    - converting netcdf units for {scenario} {gcm} using cdo")
+                    pool = multiprocessing.Pool(processes=variables.processes)
+                    pool.starmap_async(os.system, unitJobs)
+                    pool.close()
+                    pool.join()
+                    for command in unitJobs:
+                        os.system(f"{command} >> null")
+
+                    for command in unitNames:
+                        os.system(f"{command} >> null")
+
+                    finalOutFile = f"../model-data/{region}/weather/swatplus/{scenario}_{gcm}.nc4"
+
+                    # Set global attributes using individual CDO commands
+                    title_val = f"netcdf Data prepared for CoSWAT-GM prepared from ISIMIP Dataset"
+                    institution_val = "Texas A&M Agrilife Research; Vrije Universiteit Brussel"
+                    contact_val = "celray james chawanda"
+                    source_val = "ISIMIP Project Dataset"
+                    history_val = f"created on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     
-                    # extract data
-                    lonList, latList = zip(*[(float(s.split(',')[0]), float(s.split(',')[1])) for s in selectedCoordinates])
-                    # Convert to NumPy arrays with shape (points,)
-                    lonArray = numpy.array(lonList)
-                    latArray = numpy.array(latList)
-                    
-                    print(f"  > getting {currentVariables[extType]} from {mergedFileName} using xarray")
-                    dataset = xarray.open_dataset(mergedFileName, chunks={})
+                    command = f'cdo -O -setcalendar,gregorian -setattribute,title="{title_val}" -setattribute,institution="{institution_val}" -setattribute,contact="{contact_val}" -setattribute,source="{source_val}" -setattribute,history="{history_val}" -merge {" ".join(mergerNames)} {finalOutFile}'
 
-                    print(f"    - extracting points data")
-                    pointsData = dataset[currentVariables[extType]].sel(
-                        lon=xarray.DataArray(lonArray, dims="points"),
-                        lat=xarray.DataArray(latArray, dims="points"),
-                        method="nearest"
-                    )
+                    print(f"    - merging netcdf files")
+                    os.system(f"{command} >> null")
 
-                    pointsDataFrameMin = None
+                else:
+                    for extType in extTypes:
+                        if not extType in currentVariables:
+                            print(f"  > no variable found for {extType}")
+                            continue
 
-                    if extType == "tem":
-                        print(f"    - getting minimum temperature")
-                        datasetTemMin = xarray.open_dataset(mergedFileName.replace("tasmax", "tasmin"), chunks={})
-                        pointsDataTemMin = datasetTemMin["tasmin"].sel(
+                        mergedFileName = f"{dstDirMerged}/{scenario}_{gcm}_{currentVariables[extType]}.nc4"
+                        if not exists(mergedFileName):
+                            print(f"  > file not found: {mergedFileName}")
+                            continue
+                        
+                        # extract data
+                        lonList, latList = zip(*[(float(s.split(',')[0]), float(s.split(',')[1])) for s in selectedCoordinates])
+                        # Convert to NumPy arrays with shape (points,)
+                        lonArray = numpy.array(lonList)
+                        latArray = numpy.array(latList)
+                        
+                        print(f"  > getting {currentVariables[extType]} from {mergedFileName} using xarray")
+                        dataset = xarray.open_dataset(mergedFileName, chunks={})
+
+                        print(f"    - extracting points data")
+                        pointsData = dataset[currentVariables[extType]].sel(
                             lon=xarray.DataArray(lonArray, dims="points"),
                             lat=xarray.DataArray(latArray, dims="points"),
                             method="nearest"
                         )
 
-                        pointsDataFrameMin = pointsDataTemMin.to_dataframe().reset_index()
+                        pointsDataFrameMin = None
 
-                    pointsDataFrame = pointsData.to_dataframe().reset_index()
+                        if extType == "tem":
+                            print(f"    - getting minimum temperature")
+                            datasetTemMin = xarray.open_dataset(mergedFileName.replace("tasmax", "tasmin"), chunks={})
+                            pointsDataTemMin = datasetTemMin["tasmin"].sel(
+                                lon=xarray.DataArray(lonArray, dims="points"),
+                                lat=xarray.DataArray(latArray, dims="points"),
+                                method="nearest"
+                            )
 
-                    pointsDataFrame[currentVariables[extType]] = pointsDataFrame[currentVariables[extType]].astype(float)
+                            pointsDataFrameMin = pointsDataTemMin.to_dataframe().reset_index()
 
-                    if extType == "tem":
-                        pointsDataFrame[currentVariables[extType]]  = pointsDataFrame[currentVariables[extType]] + varFactors[extType]
+                        pointsDataFrame = pointsData.to_dataframe().reset_index()
+
+                        pointsDataFrame[currentVariables[extType]] = pointsDataFrame[currentVariables[extType]].astype(float)
+
+                        if extType == "tem":
+                            pointsDataFrame[currentVariables[extType]]  = pointsDataFrame[currentVariables[extType]] + varFactors[extType]
+                            
+                            pointsDataFrameMin['tasmin']                = pointsDataFrameMin['tasmin'].astype(float)
+                            pointsDataFrameMin['tasmin']                = pointsDataFrameMin['tasmin'] + varFactors[extType]
+                        else:
+                            pointsDataFrame[currentVariables[extType]]  = pointsDataFrame[currentVariables[extType]] * varFactors[extType]
                         
-                        pointsDataFrameMin['tasmin']                = pointsDataFrameMin['tasmin'].astype(float)
-                        pointsDataFrameMin['tasmin']                = pointsDataFrameMin['tasmin'] + varFactors[extType]
-                    else:
-                        pointsDataFrame[currentVariables[extType]]  = pointsDataFrame[currentVariables[extType]] * varFactors[extType]
-                    
-                    jobs = []
-                    for coordinates in selectedCoordinates:
-                        jobs.append([
-                            coordinates, pointsDataFrame, pointsDataFrameMin, extType, runPeriod, scenario, gcm, region, currentVariables, fullVarNames
-                        ])
+                        jobs = []
+                        for coordinates in selectedCoordinates:
+                            jobs.append([
+                                coordinates, pointsDataFrame, pointsDataFrameMin, extType, runPeriod, scenario, gcm, region, currentVariables, fullVarNames
+                            ])
 
-                    pool = multiprocessing.Pool(processes=variables.processes)
-                    pool.starmap_async(writeSWATPlusWeather, jobs)
-                    pool.close()
-                    pool.join()
+                        pool = multiprocessing.Pool(processes=variables.processes)
+                        pool.starmap_async(writeSWATPlusWeather, jobs)
+                        pool.close()
+                        pool.join()
 
-                    filesList = listFiles(f"../model-data/{region}/weather/swatplus/{scenario}/{gcm}/", extType)
+                        filesList = listFiles(f"../model-data/{region}/weather/swatplus/{scenario}/{gcm}/", extType)
+                        filesList = [getFileBaseName(f, extension=True) for f in filesList]
+                        filesList.sort()
 
-                    cliString = f"""{extType}.cli: {fullVarNames[extType]} file names - file written by Celray James CHAWANDA\nfilename\n""" + \
-                        "\n".join([f"{getFileBaseName(f)}" for f in filesList]) + "\n"
-                    
-                    writeFile(f"../model-data/{region}/weather/swatplus/{scenario}/{gcm}/{extType}.cli", cliString)
-                    print("\n\n")
+                        cliString = f"""{extType}.cli: {fullVarNames[extType]} file names - file written by Celray James CHAWANDA\nfilename\n""" + \
+                            "\n".join(filesList) + "\n"
+                        
+                        writeFile(f"../model-data/{region}/weather/swatplus/{scenario}/{gcm}/{extType}.cli", cliString)
+                        print("\n\n")

@@ -32,8 +32,8 @@ if __name__ == '__main__':
 
     if len(args.r) > 0: 
         regions = args.r
-        if len(regions) == 1 and regions[0] == 'all': regions = list_folders('../data-preparation/resources/regions/')
-    else: regions = list_folders('../data-preparation/resources/regions/')
+        if len(regions) == 1 and regions[0] == 'all': regions = list_folders('../model-data/')
+    else: regions = list_folders('../model-data/')
 
     details = {
         'auth': variables.final_proj_auth,
@@ -42,6 +42,9 @@ if __name__ == '__main__':
 
     for region in regions:
         report(f"\t> initializing {region}.qgs                ")
+
+        os.system(f'prepare-topo-parallel.py {region} --v {version}')
+
 
         continent = region.split('-')[0]
         zone = region.split('-')[1]
@@ -114,19 +117,19 @@ if __name__ == '__main__':
             
             thresholdCh         = variables.thresholdCh,
             thresholdSt         = variables.thresholdSt,
+            burnInDepth         = variables.burnInDepth,
 
             dem_file_name       = file_name(dem_fn, extension=False),
             land_use_file_name  = file_name(landuse_fn, extension=False),
             soils_file_name     = file_name(soils_fn, extension=False),
             burn_file_name      = file_name(burn_shape_fn, extension=False),
-            lakes_file_name     = file_name(lakes_fn, extension=False),
+            lakes_file_name     = file_name(lakes_fn, extension=False) if variables.include_reservoirs else "",
             
             dem_file_name_underscore_hyphens        = file_name(dem_fn, extension=False).replace('-', '_'),
             land_use_file_name_underscore_hyphens   = file_name(landuse_fn, extension=False).replace('-', '_'),
             soils_file_name_underscore_hyphens      = file_name(soils_fn, extension=False).replace('-', '_'),
             burn_file_name_underscore_hyphens       = file_name(burn_shape_fn, extension=False).replace('-', '_'),
-            lakes_file_name_underscore_hyphens      = file_name(lakes_fn, extension=False).replace('-', '_'),
-
+            lakes_file_name_underscore_hyphens      = file_name(lakes_fn, extension=False).replace('-', '_') if variables.include_reservoirs else "",
         )
 
         write_to(f'{proj_dir}/{proj_name}.qgs', project_string)
