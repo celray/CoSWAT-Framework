@@ -61,3 +61,13 @@ data-preparation/resources/swatplus_wgn.zip
 /.vscode
 tmpEXE/.vscode/AGENTS.md
 tmpEXE/.github/copilot-instructions.md
+resAudit
+data-preparation/resources/burn_shape-ESRI-54003.zip
+data-preparation/burn_shape-ESRI-54003.gpkg.tmp.*
+data-preparation/resources/burn_shape-ESRI-54003.gpkg
+data-preparation/resources/hydro-lakes/*
+data-preparation/resources/hydro-lakes.bak
+data-preparation/resources/GLOBathy/GLOBathy_hAV_relationships.nc
+data-preparation/resources/continents/australia-ESRI-54003.gpkg.bak
+data-preparation/resources/burn_shape-ESRI-54003.*
+

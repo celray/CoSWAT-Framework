@@ -173,7 +173,12 @@ for region in regions:
                                 'CAP_REP', 'CAP_MIN', 'DEPTH_M', 'DIS_AVG_LS', 'DOR_PC', 'ELEV_MASL', 
                                 'MAIN_USE', 'LAKE_CTRL','TIMELINE']
     
-    
+    # filter our masked lakes and reservoirs
+    from resources import maskedReservoirs
+    clipped_hydro_lakes    = clipped_hydro_lakes[~clipped_hydro_lakes['Hylak_id'].isin(maskedReservoirs.Hylak_Id)]
+    clipped_grand          = clipped_grand[~clipped_grand['GRAND_ID'].isin(maskedReservoirs.GRAND_ID)]
+
+
     # Filtering out small lakes and reservoirs
 
     clipped_hydro_lakes         = clipped_hydro_lakes.to_crs("{auth}:{code}".format(**details))          # Setting CRS of project

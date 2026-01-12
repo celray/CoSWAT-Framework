@@ -28,6 +28,7 @@ if __name__ == '__main__':
 
     parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
     parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+    parser.add_argument("--m", help="indicates this is a mannual run", action='store_true')
 
     args = parser.parse_args()
 
@@ -245,3 +246,8 @@ if __name__ == '__main__':
         print(f'done with editor in {region}', 'SWAT+ Editor run complete')
 
         print()
+
+        if args.m:
+            answer = input("run SWAT+ Model for this region? (Y/n): ")
+            if answer.lower() in ['y', 'yes', '']:
+                os.system(f'run-model.py {region} --y 1981-1982')

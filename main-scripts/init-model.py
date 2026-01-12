@@ -20,6 +20,8 @@ if __name__ == '__main__':
 
     parser.add_argument("r", help="the name of the region to initialise the model for. If not specified, all regions will be processed.", nargs='*', default=[])
     parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+    # if arg -m is passed, it means this was a mannual run
+    parser.add_argument("--m", help="indicates this is a mannual run", action='store_true')
 
     args = parser.parse_args()
 
@@ -134,5 +136,10 @@ if __name__ == '__main__':
 
         write_to(f'{proj_dir}/{proj_name}.qgs', project_string)
         print(f'\n\t> initialised {proj_name}.qgs\n')
+
+        if args.m:
+            answer = input("run qswatplus for this region? (Y/n): ")
+            if answer.lower() in ['y', 'yes', '']:
+                os.system(f'run-qswatplus.py {region} --m')
 
 print()

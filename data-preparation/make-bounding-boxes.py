@@ -36,6 +36,27 @@ if __name__ == '__main__':
         # extract the regions.zip file
         os.system("unzip resources/regions.zip -d resources/")
 
+    if not exists("resources/burn_shape-ESRI-54003.gpkg"):
+        # download and unzip from 'https://celray.chawanda.com/assets/downloads/burn_shape-ESRI-54003.zip'
+
+        # we will use the following bash commands
+        # tmpFile="$(mktemp finalFile.tmp.XXXXXX)"
+
+        # wget -O "$tmpFile" "https://example.com/file" \
+        # && sync "$tmpFile" \
+        # && mv -f "$tmpFile" finalFile
+
+        command = '''
+        tmpFile="$(mktemp burn_shape-ESRI-54003.gpkg.tmp.XXXXXX)" \
+        && wget -O "$tmpFile" "https://celray.chawanda.com/assets/downloads/burn_shape-ESRI-54003.zip" \
+        && sync "$tmpFile" \
+        && mv -f "$tmpFile" "resources/burn_shape-ESRI-54003.zip"
+        '''
+        os.system(command)
+
+        # unzip the file replacing any if necessary
+        os.system("unzip resources/burn_shape-ESRI-54003.zip -d resources/")
+
     for region in regions:
 
         report(f"\t> preparing bounding box for {region}                ")

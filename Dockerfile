@@ -69,6 +69,24 @@ RUN echo 'export PATH=$PATH:/CoSWAT-Global-Model/main-scripts' >> /home/$USERNAM
 RUN echo 'export PYTHONPATH=$PYTHONPATH:/CoSWAT-Global-Model/main-scripts' >> /home/$USERNAME/.bashrc
 RUN echo 'export PYTHONDONTWRITEBYTECODE=1' >> /home/$USERNAME/.bashrc    # removes __pycache__ directories at the expense of start up overhead
 
+# 1. Define the completion function (same as before)
+RUN echo '_coswat_region_completion() {' >> /home/$USERNAME/.bashrc
+RUN echo '    local cur=${COMP_WORDS[COMP_CWORD]}' >> /home/$USERNAME/.bashrc
+RUN echo '    if [ -f /CoSWAT-Global-Model/data-preparation/resources/regions.txt ]; then' >> /home/$USERNAME/.bashrc
+RUN echo '        local options=$(cat /CoSWAT-Global-Model/data-preparation/resources/regions.txt)' >> /home/$USERNAME/.bashrc
+RUN echo '        COMPREPLY=( $(compgen -W "$options" -- $cur) )' >> /home/$USERNAME/.bashrc
+RUN echo '    fi' >> /home/$USERNAME/.bashrc
+RUN echo '}' >> /home/$USERNAME/.bashrc
+
+# 2. Dynamic Loop: Apply this function to ALL scripts in main-scripts
+# This loop runs every time a shell starts, so it catches new scripts automatically.
+RUN echo 'if [ -d /CoSWAT-Global-Model/main-scripts ]; then' >> /home/$USERNAME/.bashrc
+RUN echo '    for scriptPath in /CoSWAT-Global-Model/main-scripts/*; do' >> /home/$USERNAME/.bashrc
+RUN echo '        scriptName=$(basename "$scriptPath")' >> /home/$USERNAME/.bashrc
+RUN echo '        complete -o nospace -F _coswat_region_completion "$scriptName"' >> /home/$USERNAME/.bashrc
+RUN echo '    done' >> /home/$USERNAME/.bashrc
+RUN echo 'fi' >> /home/$USERNAME/.bashrc
+
 # Copy SWAT+ files to user accessible locations
 RUN mkdir -p /home/$USERNAME/.local/share/SWATPlus/Databases
 RUN mkdir -p /home/$USERNAME/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus
@@ -113,10 +131,14 @@ if [ -d "/CoSWAT-Global-Model/data-preparation" ] && [ "$(ls -A /CoSWAT-Global-M
   chmod +x /CoSWAT-Global-Model/data-preparation/*\n\
   echo "made scripts in data-preparation executable"\n\
 fi\n\
+ls /CoSWAT-Global-Model/data-preparation/resources/regions/ > /CoSWAT-Global-Model/data-preparation/resources/regions.txt\n\
 exec "$@"' > /entrypoint.sh
 
 # Make the entrypoint script executable
 RUN chmod +x /entrypoint.sh
+
+RUN echo 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi' >> /home/$USERNAME/.bash_profile
+RUN chown -R $USERNAME:$USERNAME /home/$USERNAME
 
 # Switch to non-root user
 USER $USERNAME

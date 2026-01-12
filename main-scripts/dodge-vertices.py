@@ -173,6 +173,8 @@ if __name__ == '__main__':
         threshold = 0.001
         touchPointsData = []
 
+        print(f'fixing reservoirs for region: {region} ...')
+
         seenCoords = set()
         for idx, lake in lakes.iterrows():
             lakeGeom = lake.geometry
@@ -245,7 +247,7 @@ if __name__ == '__main__':
 
             streamGeom = streams.loc[stream_id].geometry
             if streamGeom is None or streamGeom.is_empty:
-                print(f"empty stream geometry for stream_id {stream_id}")
+                # print(f"empty stream geometry for stream_id {stream_id}")
                 continue
 
             # find the nearest segment in the stream to the touch point
@@ -278,6 +280,11 @@ if __name__ == '__main__':
         # save river segments to file
         # riverSegments.to_file(outDir + "/riverSegments.gpkg")
 
+        # add relationship column - handle empty DataFrame case
+        if not riverSegments.empty:
+            riverSegments['relationship'] = riverSegments.apply(lambda row: determineRelationship(row, lakes), axis=1)
+        else:
+            riverSegments['relationship'] = []
 
         # we insert touch points as vertices in the reservoir polygons
         reservoirSegments = []
@@ -398,7 +405,6 @@ if __name__ == '__main__':
         # spatial joins or point in polygon checks
 
         # save updated river segments to file
-        riverSegments['relationship'] = riverSegments.apply(lambda row: determineRelationship(row, lakes), axis=1)
         # riverSegments.to_file(outDir + "/riverSegments.gpkg")
 
 
@@ -626,13 +632,13 @@ if __name__ == '__main__':
             angle = math.degrees(math.atan2(p3.y - p2.y, p3.x - p2.x) - math.atan2(p1.y - p2.y, p1.x - p2.x))
             angle = abs(angle)
 
-            print(f"angle at touch point {tp.name}: {angle}")
+            # print(f"angle at touch point {tp.name}: {angle}")
             # update river segment angle info
             riverSegments.at[tp.name, 'angle'] = angle
 
             if (angle != 0) and (angle != 180):
                 # we will move that vertex away from the centroid by demRes/5 m
-                print(f"non-flat entry at touch point {tp.name}, moving vertex away from centroid")
+                # print(f"non-flat entry at touch point {tp.name}, moving vertex away from centroid")
                 lake_id = tp['lake_id']
                 lakeGeom = lakes.at[lake_id, 'geometry']
                 if not isinstance(lakeGeom, Polygon):
@@ -664,7 +670,7 @@ if __name__ == '__main__':
                         lakes.at[lake_id, 'geometry'] = newLakeGeom
             else:
                 # the entry is flat (0 or 180 degrees), move the vertex away from the reservoir centroid by 100m
-                print(f"flat entry at touch point {tp.name}, moving vertex away from centroid")
+                # print(f"flat entry at touch point {tp.name}, moving vertex away from centroid")
                 lake_id = tp['lake_id']
                 lakeGeom = lakes.at[lake_id, 'geometry']
                 if not isinstance(lakeGeom, Polygon):
@@ -803,7 +809,7 @@ if __name__ == '__main__':
                     dx = cx - tp_x
                     dy = cy - tp_y
                     dist = math.sqrt(dx**2 + dy**2)
-                    print(f'found coinciding vertex at {c} for touch point {tp_x}, {tp_y}, moving it inward')
+                    # print(f'found coinciding vertex at {c} for touch point {tp_x}, {tp_y}, moving it inward')
                     if dist > 0:
 
                         ux = dx / dist
@@ -820,11 +826,307 @@ if __name__ == '__main__':
         # remove empty geometries
         lakes = lakes[~lakes['geometry'].is_empty]
 
+        # further processing for lakes here
+        # Fix reservoirs with out-in channels (stage 4 logic) and multi-outlet issues (stage 5 logic)
+        
+        print(f'  > fixing out-in and multi-outlet reservoirs...')
+        
+        from shapely.ops import unary_union
+        from collections import defaultdict
+        
+        for iteration in range(3):  # repeat a few times to ensure all issues are resolved
+            for lake_idx in lakes.index:
+                lake = lakes.loc[lake_idx]
+                lakeGeom = lake.geometry
+                if lakeGeom is None or lakeGeom.is_empty:
+                    continue
+                
+                # Find channels that intersect with this lake
+                intersectingStreams = streams[streams.geometry.intersects(lakeGeom)]
+                if intersectingStreams.empty:
+                    continue
+                
+                lakeBuffered = lakeGeom.buffer(50)  # small buffer for proximity check
+                
+                # Collect all outside segments from intersecting streams
+                allOutsideSegments = []
+                for _, stream in intersectingStreams.iterrows():
+                    geom = stream.geometry
+                    if geom is None or geom.is_empty:
+                        continue
+                    
+                    outsidePart = geom.difference(lakeGeom)
+                    
+                    if not outsidePart.is_empty:
+                        if outsidePart.geom_type == 'LineString':
+                            allOutsideSegments.append(outsidePart)
+                        elif outsidePart.geom_type == 'MultiLineString':
+                            allOutsideSegments.extend(list(outsidePart.geoms))
+                
+                if not allOutsideSegments:
+                    continue
+                
+                # Find segments that exit and re-enter the reservoir (both endpoints near reservoir)
+                outinSegments = []
+                for seg in allOutsideSegments:
+                    startPoint = Point(seg.coords[0])
+                    endPoint = Point(seg.coords[-1])
+                    
+                    nearStart = lakeBuffered.contains(startPoint)
+                    nearEnd = lakeBuffered.contains(endPoint)
+                    
+                    if nearStart and nearEnd:
+                        outinSegments.append(seg)
+                
+                # Build a graph: node -> list of (segment_index, other_node)
+                def coord_key(coord):
+                    return (round(coord[0], 1), round(coord[1], 1))
+                
+                graph = defaultdict(list)
+                segmentsByIndex = {}
+                exitNodes = set()
+                
+                for i, seg in enumerate(allOutsideSegments):
+                    startKey = coord_key(seg.coords[0])
+                    endKey = coord_key(seg.coords[-1])
+                    segmentsByIndex[i] = seg
+                    
+                    graph[startKey].append((i, endKey))
+                    graph[endKey].append((i, startKey))
+                    
+                    # Mark nodes near the reservoir as exit nodes
+                    if lakeBuffered.contains(Point(seg.coords[0])):
+                        exitNodes.add(startKey)
+                    if lakeBuffered.contains(Point(seg.coords[-1])):
+                        exitNodes.add(endKey)
+                
+                # BFS to find all segments on paths connecting exit nodes
+                segmentsToBuffer = set()
+                
+                for startExit in exitNodes:
+                    visited = set()
+                    queue = [(startExit, [])]
+                    
+                    while queue:
+                        currentNode, path = queue.pop(0)
+                        
+                        if currentNode in visited:
+                            continue
+                        visited.add(currentNode)
+                        
+                        # If we reached another exit node (not the start), mark the path
+                        if currentNode in exitNodes and currentNode != startExit and len(path) > 0:
+                            for segIdx in path:
+                                segmentsToBuffer.add(segIdx)
+                        
+                        # Explore neighbors
+                        for segIdx, neighborNode in graph[currentNode]:
+                            if neighborNode not in visited:
+                                queue.append((neighborNode, path + [segIdx]))
+                
+                # Combine segments from both stage 4 (out-in) and stage 5 (multi-outlet paths)
+                allSegmentsToFix = set()
+                for seg in outinSegments:
+                    # Find the index of this segment
+                    for i, s in segmentsByIndex.items():
+                        if seg.equals(s):
+                            allSegmentsToFix.add(i)
+                            break
+                allSegmentsToFix.update(segmentsToBuffer)
+                
+                if not allSegmentsToFix:
+                    continue
+                
+                # Buffer and union all segments with the lake
+                fixedLake = lakeGeom
+                for segIdx in allSegmentsToFix:
+                    segment = segmentsByIndex[segIdx]
+                    segmentBuffer = segment.buffer(variables.data_resolution * 1.1, cap_style=1)  # round cap for all directions
+                    fixedLake = unary_union([fixedLake, segmentBuffer])
+                
+                # Fill any interior holes
+                if fixedLake.geom_type == 'Polygon' and fixedLake.interiors:
+                    fixedLake = Polygon(fixedLake.exterior)
+                elif fixedLake.geom_type == 'MultiPolygon':
+                    fixedLake = unary_union([Polygon(p.exterior) for p in fixedLake.geoms])
+                
+                # Smooth the result
+                fixedLake = fixedLake.buffer(10).buffer(-10)
+                
+                lakes.at[lake_idx, 'geometry'] = fixedLake
+            
+        print(f'  > reservoir fixes complete.')
+        
+        # === CARVE HEADWATER CHANNELS INTO RESERVOIRS ===
+        # If an incoming headwater channel (no upstream tributaries) has a segment outside
+        # the reservoir that is ≤ data_resolution, carve into the reservoir so the outside
+        # segment becomes at least 2× data_resolution
+        print(f'  > carving short headwater channels into reservoirs...')
+        
+        # First, identify headwater streams (streams with no upstream connections)
+        # Streams are digitized downstream to upstream, so upstream end is the LAST point
+        def get_upstream_point(geom):
+            if geom.geom_type == 'MultiLineString':
+                lastLine = list(geom.geoms)[-1]
+                return Point(lastLine.coords[-1])
+            else:
+                return Point(geom.coords[-1])
+        
+        def get_downstream_point(geom):
+            if geom.geom_type == 'MultiLineString':
+                firstLine = list(geom.geoms)[0]
+                return Point(firstLine.coords[0])
+            else:
+                return Point(geom.coords[0])
+        
+        # Build set of all downstream points
+        downstreamPoints = set()
+        for _, stream in streams.iterrows():
+            geom = stream.geometry
+            if geom is None or geom.is_empty:
+                continue
+            dp = get_downstream_point(geom)
+            downstreamPoints.add((round(dp.x, 1), round(dp.y, 1)))
+        
+        # A stream is a headwater if its upstream point doesn't match any downstream point
+        headwaterStreams = []
+        for idx, stream in streams.iterrows():
+            geom = stream.geometry
+            if geom is None or geom.is_empty:
+                continue
+            up = get_upstream_point(geom)
+            upKey = (round(up.x, 1), round(up.y, 1))
+            if upKey not in downstreamPoints:
+                headwaterStreams.append(idx)
+        
+        carveCount = 0
+        for lake_idx in lakes.index:
+            lake = lakes.loc[lake_idx]
+            lakeGeom = lake.geometry
+            if lakeGeom is None or lakeGeom.is_empty:
+                continue
+            
+            # Find headwater streams that intersect this lake
+            for stream_idx in headwaterStreams:
+                stream = streams.loc[stream_idx]
+                streamGeom = stream.geometry
+                if streamGeom is None or streamGeom.is_empty:
+                    continue
+                
+                if not lakeGeom.intersects(streamGeom):
+                    continue
+                
+                # Get the part of the stream outside the lake
+                outsidePart = streamGeom.difference(lakeGeom)
+                if outsidePart.is_empty:
+                    continue
+                
+                # Calculate the length of the outside part
+                outsideLength = outsidePart.length
+                
+                # If outside length is <= data_resolution, we need to carve
+                if outsideLength <= variables.data_resolution:
+                    # We need to carve into the lake so outside becomes 2× data_resolution
+                    # Calculate how much more we need outside
+                    neededLength = 2 * variables.data_resolution - outsideLength
+                    
+                    # Get the intersection point(s) of stream with lake boundary
+                    intersection = lakeGeom.boundary.intersection(streamGeom)
+                    
+                    if intersection.is_empty:
+                        continue
+                    
+                    # Get the entry point (where stream enters the lake from outside)
+                    # This is the point closest to the upstream end of the stream
+                    upstreamPt = get_upstream_point(streamGeom)
+                    
+                    if intersection.geom_type == 'Point':
+                        entryPoint = intersection
+                    elif intersection.geom_type == 'MultiPoint':
+                        # Find the point closest to upstream
+                        entryPoint = min(intersection.geoms, key=lambda p: p.distance(upstreamPt))
+                    else:
+                        continue
+                    
+                    # Create a carve polygon: buffer the stream inside the lake
+                    # by carving a path into the lake along the stream
+                    insidePart = streamGeom.intersection(lakeGeom)
+                    if insidePart.is_empty:
+                        continue
+                    
+                    # Get the segment to carve (from entry point, going inside for neededLength)
+                    if insidePart.geom_type == 'LineString':
+                        insideCoords = list(insidePart.coords)
+                    elif insidePart.geom_type == 'MultiLineString':
+                        # Flatten all coords
+                        insideCoords = []
+                        for ls in insidePart.geoms:
+                            insideCoords.extend(list(ls.coords))
+                    else:
+                        continue
+                    
+                    if len(insideCoords) < 2:
+                        continue
+                    
+                    # Find the point on inside part closest to entry point and trace neededLength
+                    # Build a line from entry point along the inside part for neededLength distance
+                    carveLength = min(neededLength + variables.data_resolution, insidePart.length)
+                    
+                    # Create carve segment by interpolating along inside part
+                    if insidePart.geom_type in ['LineString', 'MultiLineString']:
+                        # Project entry point onto inside part and get the carve segment
+                        if insidePart.geom_type == 'MultiLineString':
+                            # Merge into single linestring for simplicity
+                            from shapely.ops import linemerge
+                            try:
+                                insidePart = linemerge(insidePart)
+                            except:
+                                continue
+                        
+                        if insidePart.geom_type != 'LineString':
+                            continue
+                        
+                        # Get distance along line for entry point
+                        entryDist = insidePart.project(entryPoint)
+                        
+                        # Carve from entry point into the lake for carveLength
+                        # Determine direction (are we going from start or end of inside part?)
+                        if entryDist < insidePart.length / 2:
+                            # Entry is near start, carve towards end
+                            endDist = min(entryDist + carveLength, insidePart.length)
+                            carveSegment = LineString([
+                                insidePart.interpolate(entryDist),
+                                insidePart.interpolate(endDist)
+                            ])
+                        else:
+                            # Entry is near end, carve towards start
+                            startDist = max(entryDist - carveLength, 0)
+                            carveSegment = LineString([
+                                insidePart.interpolate(startDist),
+                                insidePart.interpolate(entryDist)
+                            ])
+                        
+                        # Buffer the carve segment to create carve polygon
+                        carveBuffer = carveSegment.buffer(variables.data_resolution, cap_style=1)
+                        
+                        # Subtract from lake
+                        newLakeGeom = lakeGeom.difference(carveBuffer)
+                        
+                        if not newLakeGeom.is_empty:
+                            # Keep only the largest polygon if multipolygon
+                            if newLakeGeom.geom_type == 'MultiPolygon':
+                                newLakeGeom = max(newLakeGeom.geoms, key=lambda p: p.area)
+                            
+                            lakes.at[lake_idx, 'geometry'] = newLakeGeom
+                            lakeGeom = newLakeGeom  # Update for next iteration
+                            carveCount += 1
+        
+        print(f'  > carved {carveCount} headwater channels into reservoirs.')
+
+
         # save updated lakes to file
         lakes.to_file(lakesFN)
         # save updated river segments to file
         riverSegments.to_file(f"{lakesFN.replace('.shp', '_riverSegments.gpkg')}")
         # save reservoir segments to file
         reservoirSegments.to_file(f"{lakesFN.replace('.shp', '_reservoirSegments.gpkg')}")
-
-

@@ -10,8 +10,8 @@ version                     = "1.2.0"
 
 # general
 data_resolution             = 500
-processes                   = 16
-taudemProcesses             = 16
+processes                   = 64
+taudemProcesses             = 64
 no_data_value               = -999
 
 # dem variables
