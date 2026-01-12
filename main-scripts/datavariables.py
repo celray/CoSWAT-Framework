@@ -6,12 +6,12 @@ import platform
 
 
 # version
-version                     = "1.2.0"
+version                     = "2.0.0"
 
 # general
 data_resolution             = 500
-processes                   = 64
-taudemProcesses             = 64
+processes                   = 4
+taudemProcesses             = 4
 no_data_value               = -999
 
 # dem variables

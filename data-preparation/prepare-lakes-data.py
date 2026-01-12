@@ -106,12 +106,12 @@ globathy_path       = variables.globathy_path
 
 if not exists(hydro_lakes_path):
     print(f"\t! hydroLakes dataset not found at {hydro_lakes_path}")
-    print(f"\t> attempting to retrieve : 'https://celray.chawanda.com/assets/downloads/hydroLakes.7z'")
+    print(f"\t> attempting to retrieve : 'https://celray.chawanda.com/assets/downloads/HydroLAKES_v10.7z'")
 
     createPath(os.path.dirname(hydro_lakes_path))
-    downloadFile('https://celray.chawanda.com/assets/downloads/hydroLakes.7z', f"{os.path.dirname(hydro_lakes_path)}/", num_connections=1)
+    downloadFile('https://celray.chawanda.com/assets/downloads/HydroLAKES_v10.7z', f"{os.path.dirname(hydro_lakes_path)}/", num_connections=1)
     print(f"\t> uncompressing")
-    src = f"{os.path.dirname(hydro_lakes_path)}/hydroLakes.7z"
+    src = f"{os.path.dirname(hydro_lakes_path)}/HydroLAKES_v10.7z"
     dst = f"{os.path.dirname(hydro_lakes_path)}/"
     uncompress(src, dst)
     deleteFile(src)

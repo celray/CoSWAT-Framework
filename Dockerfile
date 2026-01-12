@@ -87,6 +87,14 @@ RUN echo '        complete -o nospace -F _coswat_region_completion "$scriptName"
 RUN echo '    done' >> /home/$USERNAME/.bashrc
 RUN echo 'fi' >> /home/$USERNAME/.bashrc
 
+# also for scripts in data-preparation
+RUN echo 'if [ -d /CoSWAT-Global-Model/data-preparation ]; then' >> /home/$USERNAME/.bashrc
+RUN echo '    for scriptPath in /CoSWAT-Global-Model/data-preparation/*; do' >> /home/$USERNAME/.bashrc
+RUN echo '        scriptName=$(basename "$scriptPath")' >> /home/$USERNAME/.bashrc
+RUN echo '        complete -o nospace -F _coswat_region_completion "$scriptName"' >> /home/$USERNAME/.bashrc
+RUN echo '    done' >> /home/$USERNAME/.bashrc
+RUN echo 'fi' >> /home/$USERNAME/.bashrc
+
 # Copy SWAT+ files to user accessible locations
 RUN mkdir -p /home/$USERNAME/.local/share/SWATPlus/Databases
 RUN mkdir -p /home/$USERNAME/.local/share/QGIS/QGIS3/profiles/default/python/plugins/QSWATPlusLinux3_64/QSWATPlus

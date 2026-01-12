@@ -101,7 +101,6 @@ if __name__ == "__main__":
     else:
         quit()
 
-    writeFile(f'{weatherDir}/download/downloadLock', 'locked')
     # loop through scenarios
     for scenario in variables.available_scenarios:
         print(f"processing scenario: {scenario}")
@@ -159,13 +158,15 @@ if __name__ == "__main__":
             writeFile(f"{weatherDir}/download_links.txt", downloadString)
             
             # download weather
+            writeFile(f'{weatherDir}/download/downloadLock', 'locked')
+
             createPath(f'{weatherDir}/download/{scenario}/')
-            # pool = multiprocessing.Pool(variables.processes)
+            pool = multiprocessing.Pool(variables.processes)
 
-            # results = pool.starmap_async(downloadFile, downloadList)
-            # results.get()
+            results = pool.starmap_async(downloadFile, downloadList)
+            results.get()
+            pool.close()
 
-            # pool.close()
 
             if variables.weather_redownload:
                 for link in downloadList:
