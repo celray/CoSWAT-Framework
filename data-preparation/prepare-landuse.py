@@ -17,7 +17,8 @@ GitHub  : github.com/celray
 import multiprocessing as mp
 
 import wget, sys, os
-from cjfx import delete_file, file_name, list_files, resample_raster, exists, copy_file, list_folders, ignore_warnings, create_path
+from ccfx import deleteFile as delete_file, getFileBaseName as file_name, exists, listFolders as list_folders, ignoreWarnings as ignore_warnings
+from coswatFX import list_files, resample_raster, copy_file, create_path
 from osgeo import gdal
 
 ignore_warnings()

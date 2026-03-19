@@ -14,7 +14,8 @@ GitHub  : github.com/celray
 '''
 
 # imports
-from cjfx import download_file, unzip_file, list_files, delete_file, file_name, resample_raster, clip_raster, set_nodata
+from ccfx import downloadFile as download_file, deleteFile as delete_file, getFileBaseName as file_name
+from coswatFX import unzip_file, list_files, resample_raster, clip_raster, set_nodata
 import multiprocessing as mp
 from osgeo_utils import gdal_merge
 from osgeo import gdal

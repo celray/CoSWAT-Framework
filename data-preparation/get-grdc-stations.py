@@ -3,8 +3,10 @@
 import os
 from io import StringIO
 
-from cjfx import (clip_features, create_path, exists, geopandas, list_folders, ignore_warnings,
-                  pandas, read_from, resample_ts_df, show_progress, sys)
+import sys
+from ccfx import exists, geopandas, listFolders as list_folders, ignoreWarnings as ignore_warnings, pandas, readFrom as read_from
+from coswatFX import clip_features, create_path, show_progress
+from coswatFX import resample_ts_df
 
 # change working directory
 me = os.path.realpath(__file__)

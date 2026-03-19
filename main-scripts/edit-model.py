@@ -12,7 +12,9 @@ GitHub  : github.com/celray
 '''
 
 import os, sys, platform, shutil
-from cjfx import list_folders, exists, write_to, read_from, sqlite_connection, list_files, file_name, copy_file, show_progress, goto_dir, pandas, sqlite3, ignore_warnings, download_file
+import sqlite3
+from ccfx import listFolders as list_folders, exists, readFrom as read_from, getFileBaseName as file_name, ignoreWarnings as ignore_warnings, pandas, downloadFile as download_file
+from coswatFX import write_to, sqlite_connection, list_files, copy_file, show_progress, goto_dir
 from coswatFX import resolveRegions
 import datavariables as variables
 import argparse

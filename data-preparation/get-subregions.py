@@ -10,7 +10,8 @@ Licence : MIT
 '''
 
 import sys, os
-from cjfx import list_folders, exists, copy_file, create_path, ignore_warnings
+from ccfx import listFolders as list_folders, exists, ignoreWarnings as ignore_warnings
+from coswatFX import copy_file, create_path
 
 ignore_warnings()
 
