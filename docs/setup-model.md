@@ -49,10 +49,11 @@ Each step of the setup process is documented in detail:
    - Parameter adjustment
    - Model configuration
 
-5. [Model Execution](model-execution.md)
-   - Running simulations
-   - Progress monitoring
-   - Error handling
+5. Model Execution (`run-model.py`)
+   - Parallel subregion execution with multi-progress bars (pty-based for Fortran stdout)
+   - Dependency-aware scheduling: upstream subregions complete before downstream starts
+   - Automatic recall conversion: upstream outlet output converted to downstream inlet data between runs
+   - Non-subregioned regions use original sequential single-progress execution
 
 6. [Model Evaluation](model-evaluation.md)
    - Performance metrics
@@ -69,9 +70,33 @@ Each step of the setup process is documented in detail:
    - API endpoints
    - Data services
 
+## Subregion Support
+Large regions can be split into subregions for parallel processing. If a `subregions.gpkg` file exists in the region's resources directory, the pipeline will:
+- Create per-subregion projects during initialization
+- Generate a `schema.json` connectivity file
+- Clip outlets and lakes by subregion masks
+- Run QSWAT+ for each subregion (in parallel via `subregionProcesses`)
+- Optimize delineation by reusing TauDEM outputs across subregions
+- Configure inter-subregion water routing via SWAT+ recall system (upstream outlet → downstream inlet)
+- Run SWAT+ simulations in parallel with dependency ordering and automatic recall data conversion
+
+To auto-generate subregions from an existing delineation:
+```bash
+partition-region.py <region> --n <num_subregions> [--v <version>]
+```
+
+See [QSWAT+ Processing](qswat-processing.md) for subregion-specific delineation details.
+
 ## Configuration
 Additional configuration options are available in:
-- `./data-preparation/resources/datavariables.py`
+- `./main-scripts/datavariables.py`
+
+Key parallel processing settings:
+```python
+processes           = 2   # regions processed in parallel
+taudemProcesses     = 4   # TauDEM parallelization
+subregionProcesses  = 3   # subregions processed in parallel
+```
 
 ## Dependencies
 - Python 3.x

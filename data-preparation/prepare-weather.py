@@ -79,10 +79,6 @@ if __name__ == "__main__":
 
     counter = 0
     skipWeatherDownload = False
-    while exists(f'{weatherDir}/download/downloadLock'):
-        time.sleep(5)
-        print(f"\r  > waiting for download lock to be released... ({counter * 5} seconds)", end=""); sys.stdout.flush()
-        counter += 1; skipWeatherDownload = True
 
     if variables.prepare_weather:
         data = []
@@ -155,6 +151,11 @@ if __name__ == "__main__":
                 downloadList.append([f'{line}', f'{weatherDir}/download/{scenario}/{gcm}/', "resume", 2])
                 createPath(f'{weatherDir}/download/{scenario}/{gcm}/')
 
+            while exists(f'{weatherDir}/download/downloadLock'):
+                time.sleep(5)
+                print(f"\r  > waiting for download lock to be released... ({counter * 5} seconds)", end=""); sys.stdout.flush()
+                counter += 1; skipWeatherDownload = True
+
             writeFile(f"{weatherDir}/download_links.txt", downloadString)
             
             # download weather
@@ -180,8 +181,7 @@ if __name__ == "__main__":
                     if not skipWeatherDownload: os.system(command)
             print()
 
-            if exists(f'{weatherDir}/download/downloadLock'):
-                deleteFile(f'{weatherDir}/download/downloadLock')
+            deleteFile(f'{weatherDir}/download/downloadLock')
 
 
             for region in regions:
@@ -340,7 +340,8 @@ if __name__ == "__main__":
                     for command in unitNames:
                         os.system(f"{command} >> null")
 
-                    finalOutFile = f"../model-data/{region}/weather/swatplus/{scenario}_{gcm}.nc4"
+                    createPath(f"../model-data/{region}/weather/swatplus/{scenario}/")
+                    finalOutFile = f"../model-data/{region}/weather/swatplus/{scenario}/{gcm}.nc4"
 
                     # Set global attributes using individual CDO commands
                     title_val = f"netcdf Data prepared for CoSWAT-GM prepared from ISIMIP Dataset"

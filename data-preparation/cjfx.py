@@ -1864,7 +1864,7 @@ def show_progress(progress, end, dt=None, string_before="", string_after="", bar
         else:
             dt = None
 
-    sys.stdout.write("\r{str_b}{bar} {sp}{pct}% {str_after}          ".format(
+    sys.stdout.write("\r{str_b}{bar} {sp}{pct}% {str_after}  ".format(
         str_b=string_before, sp = "  " if percent < 100 else "",
         bar=hashes + spaces,
         pct='{:06.2f}'.format(percent * 100),
@@ -2067,6 +2067,7 @@ def file_name(path_, extension=True):
     else:
         fn = os.path.basename(path_).split(".")[0]
     return(fn)
+
 
 def read_from(filename, decode_codec = None, v=False):
     '''

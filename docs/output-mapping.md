@@ -56,9 +56,12 @@ output_re_shape = True  # Force reshaping of output
 map_columns = ["precip", "snofall", "snomlt", "surq_gen", ...]
 ```
 
+## Subregion Support
+`map-outputs.py` auto-detects subregions via `schema.json`. For subregioned models, it maps each subregion separately (reading from `{region}/{subDir}/Watershed/Shapes/hrus2.shp` and `simulations/{region}/{subDir}/hru_wb_aa.txt`) then merges all results into the cumulative output. Each HRU gets a `subregion` column for identification.
+
 ## Input Requirements
-- HRU shapefile (hrus2.shp)
-- Annual water balance file (hru_wb_aa.txt)
+- HRU shapefile (`hrus2.shp`)
+- Annual water balance file (`hru_wb_aa.txt`)
 - Regional projection information
 - Base DEM for rasterization
 

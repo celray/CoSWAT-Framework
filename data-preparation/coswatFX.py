@@ -10,14 +10,14 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
 
     # get the directory name without the whole path
     base_dir = os.path.basename(os.path.normpath(txtinout_dir))
-    
+
     if direct: os.system(f"{executable_path}")
     else:
         if not v:
             # Run the SWAT+ but ignore output and errors
             subprocess.run([executable_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            
+
             yrs_line = readFile('time.sim')[2].strip().split()
 
             yr_from = int(yrs_line[1])
@@ -25,9 +25,7 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
 
             delta = datetime(yr_to, 12, 31) - datetime(yr_from, 1, 1)
 
-            CREATE_NO_WINDOW = 0x08000000
-
-            process = subprocess.Popen(executable_path, stdout=subprocess.PIPE)
+            process = subprocess.Popen(executable_path, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
             counter = 0
 
@@ -39,8 +37,6 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
 
             while True:
                 line = process.stdout.readline()
-                # if "mkd" in str(line):
-                #     continue
                 line_parts = str(line).strip().split()
                 if not "Simulation" in line_parts:
                     if "reading" in line_parts:
@@ -52,12 +48,11 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
                     month = line_parts[ref_index + 1]
                     day = line_parts[ref_index + 2]
 
-
                     month = f"0{month}" if int(month) < 10 else month
                     day = f"0{day}" if int(day) < 10 else day
-                    
+
                     current += 1
-                    
+
                     if not previous_time is None:
                         day_cycle.append(datetime.now() - previous_time)
 
@@ -68,12 +63,12 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
                         av_cycle_time = sum(day_cycle, timedelta()) / len(day_cycle)
                         eta = av_cycle_time * (number_of_days - current)
 
-                        eta_str = f"  ETA - {format_timedelta(eta)}:"
+                        eta_str = f" ETA-{format_timedelta(eta)}:"
 
                     else:
                         eta_str = ''
                     modelNameShow = f"[{modelName}]" if not modelName is None else f""
-                    show_progress(current, number_of_days, bar_length=20, string_before=f"    ", string_after= f' {modelNameShow} >>  current: {day}/{month}/{year} - final: 31/12/{yr_to} {eta_str}')
+                    show_progress(current, number_of_days, bar_length=15, string_before=f" ", string_after= f' {modelNameShow} >>  {day}/{month}/{year} end-{yr_to} {eta_str}')
 
                     previous_time = datetime.now()
                 elif "ntdll.dll" in line_parts:
@@ -84,9 +79,9 @@ def runSWATPlus(txtinout_dir, final_dir = os.path.abspath(os.getcwd()),
 
                 if len(line_parts) < 2: break
 
-            show_progress(1, 1, string_before=f"      ", string_after= f'                                                                                             ')
+            show_progress(1, 1, bar_length=15, string_before=f"      ", string_after= f'                                                                                             ')
             print("\n    > SWAT+ simulation complete\n")
-        
+
     os.chdir(final_dir)
 
 
@@ -105,6 +100,28 @@ def shouldKeep(baseFn, runPeriod):
 
     return shouldKeepFile
 
+
+
+def resolveRegion(name, searchDirs=None):
+    '''resolve a partial region name (e.g. 'save') to full name (e.g. 'africa-save').
+    returns the original name if no unique match found.'''
+    if searchDirs is None:
+        baseDir = os.path.dirname(os.path.realpath(__file__))
+        searchDirs = [
+            os.path.join(baseDir, '..', 'model-data'),
+            os.path.join(baseDir, 'resources', 'regions'),
+        ]
+    for d in searchDirs:
+        if not os.path.isdir(d): continue
+        folders = [f for f in os.listdir(d) if os.path.isdir(os.path.join(d, f))]
+        if name in folders: return name
+        matches = [f for f in folders if f.endswith(f'-{name}')]
+        if len(matches) == 1: return matches[0]
+    return name
+
+def resolveRegions(names, searchDirs=None):
+    '''resolve a list of region names'''
+    return [resolveRegion(n, searchDirs) for n in names]
 
 
 def clipFeatures(inputFeaturePath:str, boundaryFeature:str, outputFeature:str, keepOnlyTypes = None, v = False) -> geopandas.GeoDataFrame:

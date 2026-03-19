@@ -58,6 +58,9 @@ os.system(f"{get_python_exe()} prepare-weather.py {regions_}")
 # get grdc stations
 os.system(f"{get_python_exe()} get-grdc-stations.py {regions_}")
 
+# get subregion data if available
+os.system(f"{get_python_exe()} get-subregions.py {regions_}")
+
 
 from cjfx import alert
 alert(f'Finished getting data for {regions_}', 'Data Preparation Complete')

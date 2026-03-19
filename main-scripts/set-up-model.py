@@ -18,6 +18,7 @@ GitHub  : github.com/celray
 import os
 import sys
 from ccfx import listFolders, ignoreWarnings
+from coswatFX import resolveRegions
 import multiprocessing
 import argparse
 
@@ -40,8 +41,8 @@ def set_up_model(region_, version_, get_data_, period_):
     os.system(f'run-qswatplus.py {region_} --v {version_}')
     os.system(f'edit-model.py {region_} --v {version_}')
 
-    os.system(f'run-model.py {region_} --v {version_} --y {period_}')
-    os.system(f'evaluate-model.py {region_} --v {version_}')
+    # os.system(f'run-model.py {region_} --v {version_} --y {period_}')
+    # os.system(f'evaluate-model.py {region_} --v {version_}')
 
 args = sys.argv
 
@@ -54,8 +55,8 @@ args = parser.parse_args()
 
 # get regions
 if len(args.r) > 0: 
-    regions = args.r
-    if len(regions) == 1 and regions[0] == 'all': 
+    regions = resolveRegions(args.r) if args.r else []
+    if len(regions) == 1 and regions[0] == 'all':
         regions = listFolders("../data-preparation/resources/regions/")
 else:
     regions = listFolders("../data-preparation/resources/regions/")

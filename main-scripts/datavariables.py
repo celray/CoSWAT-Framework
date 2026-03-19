@@ -11,7 +11,8 @@ version                     = "2.0.0"
 # general
 data_resolution             = 500
 processes                   = 4
-taudemProcesses             = 4
+taudemProcesses             = 5
+subregionProcesses          = 5
 no_data_value               = -999
 
 # dem variables
@@ -39,7 +40,7 @@ burnInDepth                 = 1000 # m
 run_flood_plains            = True
 prepareDemTopo              = False
 
-executable_path             =  '/CoSWAT-Global-Model/data-preparation/resources/rev60.5.7_64rel_linux' #'/CoSWAT-Global-Model/data-preparation/resources/swatplus-61.0.1-lin-x86_64'  #"/CoSWAT-Global-Model/data-preparation/resources/rev60.5.7_64rel_linux"
+executable_path             =  '/CoSWAT-Global-Model/data-preparation/resources/swatplus-61.0.2.11-415-gfe92bb8-ifx-lin_x86_64-Rel-nc'
 
 continental_mass            = './resources/CoSWAT-GM-world-land-masses-{auth}-{code}.gpkg'
 cutline                     = './resources/regions/{region}/land_mass-{auth}-{code}.gpkg'
@@ -98,7 +99,7 @@ weather_resolution          = 0.5
 prepare_weather             = True
 redo_weather                = True
 weather_redownload          = False
-use_netcdf                  = False
+use_netcdf                  = True
 
 # run settings
 run_period                  = '1980-2024'

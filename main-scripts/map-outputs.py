@@ -19,6 +19,7 @@ GitHub  : github.com/celray
 import os
 import sys
 from cjfx import *
+from coswatFX import resolveRegions
 import argparse
 
 ignore_warnings()
@@ -30,46 +31,56 @@ os.chdir(os.path.dirname(me))
 import datavariables as variables
 
 
-def make_gpkg(region, version, map_columns, map_log):
+def make_gpkg(region, version, map_columns, map_log, subDir=None):
 
-    print(f'\t> mapping {region}')
+    if subDir is not None:
+        projBase    = f'../model-setup/CoSWATv{version}/{region}/{subDir}'
+        simBase     = f'../simulations/CoSWATv{version}/{region}/{subDir}'
+        label       = f'{region}/{subDir}'
+    else:
+        projBase    = f'../model-setup/CoSWATv{version}/{region}'
+        simBase     = f'../simulations/CoSWATv{version}/{region}'
+        label       = region
 
-    hrus2shapefile_fn   = f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/hrus2.shp'
-    hrus_wb_aa_fn       = f'../model-setup/CoSWATv{version}/{region}/Scenarios/Default/TxtInOut/hru_wb_aa.txt'
+    print(f'\t> mapping {label}')
 
-    # check if necessay files exist
+    hrus2shapefile_fn   = f'{projBase}/Watershed/Shapes/hrus2.shp'
+    hrus_wb_aa_fn       = f'{simBase}/hru_wb_aa.txt'
+
+    # check if necessary files exist
     if not (exists(hrus2shapefile_fn) and exists(hrus_wb_aa_fn)):
-        write_to(map_log, f'{datetime.datetime.now()} - ! cannot map results from {region}', mode='a')
-        print(f'\t! cannot map results from {region}')
+        write_to(map_log, f'{datetime.datetime.now()} - ! cannot map results from {label}', mode='a')
+        print(f'\t! cannot map results from {label}')
         print(f'\t  - check that {hrus2shapefile_fn} exists')
         print(f'\t  - check that {hrus_wb_aa_fn} exists')
         return None
-    
-    hrus_gpd    = geopandas.read_file(hrus2shapefile_fn)
-    
-    hrus_gpd['region'] = \
-                f'{region}'
 
-    wb_pd       = pandas.read_csv(hrus_wb_aa_fn, skiprows=1, delim_whitespace=True, low_memory=False)
-    wb_pd       = wb_pd[wb_pd['jday'] != 'mm']
+    hrus_gpd    = geopandas.read_file(hrus2shapefile_fn, columns=['HRUS', 'geometry'])
 
+    hrus_gpd['region']      = region
+    if subDir is not None:
+        hrus_gpd['subregion'] = subDir
+
+    useCols     = ['gis_id', 'jday'] + map_columns
+    wb_pd       = pandas.read_csv(hrus_wb_aa_fn, skiprows=1, sep=r'\s+', engine='c', usecols=lambda c: c in useCols, low_memory=False)
+    wb_pd       = wb_pd[wb_pd['jday'] != 'mm'].drop(columns='jday')
 
     wb_pd['gis_id']     = pandas.to_numeric(wb_pd['gis_id'], errors='coerce')
     hrus_gpd['HRUS']    = pandas.to_numeric(hrus_gpd['HRUS'], errors='coerce')
 
-    for map_col in map_columns:
-        wb_pd[map_col] = pandas.to_numeric(wb_pd[map_col], errors='coerce')
+    numCols     = [c for c in map_columns if c in wb_pd.columns]
+    wb_pd[numCols] = wb_pd[numCols].apply(pandas.to_numeric, errors='coerce')
 
-    merged_pd   = pandas.merge(hrus_gpd, wb_pd, how = 'inner', left_on='HRUS', right_on='gis_id')
+    merged_pd   = pandas.merge(hrus_gpd, wb_pd, how='inner', left_on='HRUS', right_on='gis_id')
 
-    maps_gpd    = geopandas.GeoDataFrame(merged_pd, geometry='geometry', crs = hrus_gpd.crs)
-    
+    maps_gpd    = geopandas.GeoDataFrame(merged_pd, geometry='geometry', crs=hrus_gpd.crs)
+
     if len(maps_gpd.index) == 0:
-        print(f'\t! cannot map results from {region}')
+        print(f'\t! cannot map results from {label}')
         print(f'\t  - check that the model was fully run')
         return None
 
-    fn = f'../model-setup/CoSWATv{version}/{region}/Evaluation/Shape/wb_map_vars.gpkg'
+    fn = f'{simBase}/evaluation/Shape/wb_map_vars.gpkg'
     create_path(fn)
     delete_file(fn, v = False)
     maps_gpd.to_file(fn)
@@ -92,14 +103,14 @@ if __name__ == "__main__":
 
     # get regions
     if len(args.r) > 0:
-        regions = args.r
+        regions = resolveRegions(args.r)
         if len(regions) == 1 and regions[0] == 'all':
-            regions = list_folders(f"../model-setup/CoSWATv{version_}/")
-    else: regions = list_folders(f"../model-setup/CoSWATv{version_}/")
+            regions = list_folders(f"../simulations/CoSWATv{version_}/")
+    else: regions = list_folders(f"../simulations/CoSWATv{version_}/")
 
-    if not exists(f"../model-setup/CoSWATv{version_}"):
+    if not exists(f"../simulations/CoSWATv{version_}"):
         print(f'\t! the version, CoSWATv{version_}, does not exist, the following versions are available:')
-        for v in list_folders('../model-setup/'):
+        for v in list_folders('../simulations/'):
             if v.startswith('CoSWATv'):
                 print(f'\t\t- {v}')
         print(f'\t> please specify a valid version using the --v argument')
@@ -115,24 +126,32 @@ if __name__ == "__main__":
 
     map_log_ = write_to(f'../model-outputs/version-{version_}/maps/map.log', '', mode='o')
 
+    import json as jsonmod
+
     jobs = []
     if variables.individual_maps:
         for region_ in regions:
-            jobs.append([region_, version_, map_columns_, map_log_])
+            schemaFn = f'../model-setup/CoSWATv{version_}/{region_}/schema.json'
+            if exists(schemaFn):
+                with open(schemaFn, 'r') as f:
+                    schemaData = jsonmod.load(f)
+                for subDir in schemaData['subregions']:
+                    jobs.append([region_, version_, map_columns_, map_log_, subDir])
+            else:
+                jobs.append([region_, version_, map_columns_, map_log_, None])
             
         # Create a multiprocessing Pool
         with multiprocessing.Pool(variables.processes) as pool:
             results = [pool.apply_async(make_gpkg, job) for job in jobs]
 
+            allResults = []
             for result in results:
-                maps_gpd_ = result.get() 
-                if maps_gpd_ is None: continue
-                
-                if variables.remerge_maps:
-                    if cumulative is None:
-                        cumulative = maps_gpd_
-                    else:
-                        cumulative = geopandas.GeoDataFrame(pandas.concat([cumulative, maps_gpd_], ignore_index=True), geometry='geometry', crs = maps_gpd_.crs)
+                maps_gpd_ = result.get()
+                if maps_gpd_ is not None:
+                    allResults.append(maps_gpd_)
+
+            if variables.remerge_maps and allResults:
+                cumulative = geopandas.GeoDataFrame(pandas.concat(allResults, ignore_index=True), geometry='geometry', crs=allResults[0].crs)
 
 
     else:

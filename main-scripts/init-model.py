@@ -1,7 +1,8 @@
 #!/bin/python3
 
-import sys, os
+import sys, os, json
 from cjfx import *
+from coswatFX import resolveRegions
 import argparse
 
 ignore_warnings()
@@ -20,6 +21,7 @@ if __name__ == '__main__':
 
     parser.add_argument("r", help="the name of the region to initialise the model for. If not specified, all regions will be processed.", nargs='*', default=[])
     parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+    parser.add_argument("--sr", help="subregion id(s) to initialise", nargs='*', default=None)
     # if arg -m is passed, it means this was a mannual run
     parser.add_argument("--m", help="indicates this is a mannual run", action='store_true')
 
@@ -33,7 +35,7 @@ if __name__ == '__main__':
         version = args.v
 
     if len(args.r) > 0: 
-        regions = args.r
+        regions = resolveRegions(args.r)
         if len(regions) == 1 and regions[0] == 'all': regions = list_folders('../model-data/')
     else: regions = list_folders('../model-data/')
 
@@ -43,103 +45,182 @@ if __name__ == '__main__':
     }
 
     for region in regions:
-        report(f"\t> initializing {region}.qgs                ")
+
+        continent   = region.split('-')[0]
+        zone        = region.split('-')[1]
+
+        data_dir    = f'../model-data/{region}'
+        dst_dir     = create_path(f'../model-setup/CoSWATv{version}/')
+
+        # check if subregions exist
+        subregionsFn = f"{data_dir}/shapes/subregions.gpkg"
+        if exists(subregionsFn):
+            subregionsGdf = geopandas.read_file(subregionsFn, layer='masks')
+            subList = []
+            for _, row in subregionsGdf.iterrows():
+                subId   = row['subregion']
+                subName = row.get('name', None)
+                if subName: subList.append(f"{subId}-{subName}")
+                else: subList.append(f"{subId}")
+            # filter by --sr if specified
+            if args.sr is not None:
+                subList = [s for s in subList if s.split('-')[0] in args.sr]
+                if not subList:
+                    print(f"\t! no matching subregions for --sr {args.sr}")
+                    continue
+
+            print(f"\t> subregions to init: {', '.join(subList)}")
+
+            # build subregion id lookup and generate connectivity schema
+            subLookup = {}
+            for _, row in subregionsGdf.iterrows():
+                subId   = row['subregion']
+                subName = row.get('name', None)
+                if subName: subLookup[subId] = f"{subId}-{subName}"
+                else: subLookup[subId] = f"{subId}"
+
+            pointsGdf   = geopandas.read_file(subregionsFn, layer='points')
+            connections = []
+            for _, pt in pointsGdf.iterrows():
+                connections.append({
+                    "from":  subLookup.get(pt['OUTLET_MASK'], pt['OUTLET_MASK']),
+                    "to":    subLookup.get(pt['INLET_MASK'], pt['INLET_MASK']),
+                    "point": [round(pt.geometry.x, 2), round(pt.geometry.y, 2)],
+                })
+
+            schema = {
+                "region":       region,
+                "subregions":   subList,
+                "connections":  connections,
+            }
+
+        else:
+            schema      = None
+            subList     = [None]
+
+        # data source paths
+        demFn           = f"{data_dir}/raster/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
+        landuseFn       = f"{data_dir}/raster/landuse-esa-{variables.esa_landuse_year}-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
+        soilsFn         = f"{data_dir}/raster/soils-fao-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
+
+        lakesFn         = f"{data_dir}/shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp"
+        burnShapeFn     = f"{data_dir}/shapes/burn-shape-{variables.final_proj_auth}-{variables.final_proj_code}.shp"
+
+        # read shapefiles once for all subregions
+        burnShapeGdf    = geopandas.read_file(burnShapeFn)
+        lakesGdf        = geopandas.read_file(lakesFn)
+
+        # delete existing model before initialising
+        if args.sr is not None:
+            # only delete specific subregion directories
+            for sub in subList:
+                subPath = f'{dst_dir}/{region}/{sub}/'
+                if exists(subPath):
+                    delete_path(subPath)
+                    print(f"\t> removed existing model for {region}/{sub}")
+        else:
+            if exists(f'{dst_dir}/{region}/'):
+                print()
+                delete_path(f'{dst_dir}/{region}/')
+                print(f"\t> removed existing model for {region}")
+
+        # write connectivity schema (skip if only re-initing specific subregions)
+        if schema is not None and args.sr is None:
+            schemaPath = f'{dst_dir}/{region}/schema.json'
+            create_path(schemaPath, v=False)
+            write_to(schemaPath, json.dumps(schema, indent=4))
+            print(f"\t> wrote connectivity schema for {region}")
 
         os.system(f'prepare-topo-parallel.py {region} --v {version}')
 
+        for sub in subList:
+            if sub is not None:
+                projName    = f"{region}/{sub}"
+                qgsName     = f"{region}-{sub}"
+            else:
+                projName    = region
+                qgsName     = region
 
-        continent = region.split('-')[0]
-        zone = region.split('-')[1]
+            projDir     = f'{dst_dir}/{projName}'
 
-        dst_dir = create_path(f'../model-setup/CoSWATv{version}/')
+            report(f"\t> initializing {projName}.qgs                ")
 
-        if exists(f'{dst_dir}/{region}/{region}.qgs'):
-            # remove the directory path before continuing
-            print()
-            delete_path(f'{dst_dir}/{region}/')
-            print("\t> creating a new project...")
+            # create project structure
+            create_path(f"{projDir}/")
+            dirDEM          = create_path(f"{projDir}/Watershed/Rasters/DEM/")
+            dirLandscape    = create_path(f"{projDir}/Watershed/Rasters/Landscape/")
+            dirLanduse      = create_path(f"{projDir}/Watershed/Rasters/Landuse/")
+            dirSoil         = create_path(f"{projDir}/Watershed/Rasters/Soil/")
 
-        proj_name   = f"{region}"
-        proj_dir    = f'{dst_dir}/{proj_name}'
+            dirShapes       = create_path(f"{projDir}/Watershed/Shapes/")
 
-        data_dir    = f'../model-data/{proj_name}'
+            copy_file(demFn, f"{dirDEM}/{file_name(demFn)}")
+            copy_file(landuseFn, f"{dirLanduse}/{file_name(landuseFn)}")
+            copy_file(soilsFn, f"{dirSoil}/{file_name(soilsFn)}")
 
-        # data source paths
-        dem_fn          = f"{data_dir}/raster/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
-        landuse_fn      = f"{data_dir}/raster/landuse-esa-{variables.esa_landuse_year}-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
-        soils_fn        = f"{data_dir}/raster/soils-fao-{variables.final_proj_auth}-{variables.final_proj_code}.tif"
 
-        lakes_fn        = f"{data_dir}/shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp"
-        burn_shape_fn   = f"{data_dir}/shapes/burn-shape-{variables.final_proj_auth}-{variables.final_proj_code}.shp"
+            with zipfile.ZipFile("../data-preparation/resources/shapes.dat", 'r') as zip_ref:
+                zip_ref.extractall(dirShapes)
 
-        # create project structure
-        create_path(f"{proj_dir}/")
-        dir_DEM         = create_path(f"{proj_dir}/Watershed/Rasters/DEM/")
-        dir_Landscape   = create_path(f"{proj_dir}/Watershed/Rasters/Landscape/")
-        dir_Landuse     = create_path(f"{proj_dir}/Watershed/Rasters/Landuse/")
-        dir_Soil        = create_path(f"{proj_dir}/Watershed/Rasters/Soil/")
+            shapesFiles = list_files(f'{dirShapes}')
+            for shapesFile in shapesFiles:
+                if "[dem]" in shapesFile:
+                    copy_file(shapesFile, shapesFile.replace('[dem]', f'{file_name(demFn, extension=False)}'), delete_source=True)
 
-        dir_Shapes      = create_path(f"{proj_dir}/Watershed/Shapes/")
+            burnShapeGdf.to_file(f"{dirShapes}/{file_name(burnShapeFn)}")
 
-        copy_file(dem_fn, f"{dir_DEM}/{file_name(dem_fn)}")
-        copy_file(landuse_fn, f"{dir_Landuse}/{file_name(landuse_fn)}")
-        copy_file(soils_fn, f"{dir_Soil}/{file_name(soils_fn)}")
-        
-        
-        with zipfile.ZipFile("../data-preparation/resources/shapes.dat", 'r') as zip_ref:
-            zip_ref.extractall(dir_Shapes)
-        
-        shapes_files = list_files(f'{dir_Shapes}')
-        for shapes_file in shapes_files:
-            if "[dem]" in shapes_file:
-                copy_file(shapes_file, shapes_file.replace('[dem]', f'{file_name(dem_fn, extension=False)}'), delete_source=True)
+            # clip lakes by subregion mask so only relevant reservoirs are included
+            if sub is not None:
+                subId       = sub.split('-')[0]
+                maskGeom    = subregionsGdf[subregionsGdf['subregion'] == subId]
+                subLakes    = geopandas.clip(lakesGdf, maskGeom)
+                subLakes.to_file(f"{dirShapes}/{file_name(lakesFn)}")
+            else:
+                lakesGdf.to_file(f"{dirShapes}/{file_name(lakesFn)}")
 
-        geopandas.read_file(burn_shape_fn).to_file(f"{dir_Shapes}/{file_name(burn_shape_fn)}")
-        geopandas.read_file(lakes_fn).to_file(f"{dir_Shapes}/{file_name(lakes_fn)}")
+            # prepare qgs project
+            projectString = template_string.format(
+                project_name        = qgsName,
+                authid              = '{auth}:{code}'.format(**details),
 
-        # prepare qgs project
-        project_string = template_string.format(
-            project_name        = proj_name,
-            authid              = '{auth}:{code}'.format(**details),
+                rivs_1_id           = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                channel_shape_id    = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                dem_id              = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                lsus_shape_id       = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                hillshade_id        = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                outlets_id          = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                landuse_id          = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                reservoir_shape_id  = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                se_outlets_shape_id = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                soils_id            = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                burn_shape_id       = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                stream_shape_id     = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                subbasins_id        = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
+                lakes_id            = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
 
-            rivs_1_id           = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            channel_shape_id    = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            dem_id              = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            lsus_shape_id       = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            hillshade_id        = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            outlets_id          = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            landuse_id          = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            reservoir_shape_id  = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            se_outlets_shape_id = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            soils_id            = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            burn_shape_id       = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            stream_shape_id     = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            subbasins_id        = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            lakes_id            = f'{rand_apha_num(8)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(4)}_{rand_apha_num(12)}',
-            
-            thresholdCh         = variables.thresholdCh,
-            thresholdSt         = variables.thresholdSt,
-            burnInDepth         = variables.burnInDepth,
+                thresholdCh         = variables.thresholdCh,
+                thresholdSt         = variables.thresholdSt,
+                burnInDepth         = variables.burnInDepth,
 
-            dem_file_name       = file_name(dem_fn, extension=False),
-            land_use_file_name  = file_name(landuse_fn, extension=False),
-            soils_file_name     = file_name(soils_fn, extension=False),
-            burn_file_name      = file_name(burn_shape_fn, extension=False),
-            lakes_file_name     = file_name(lakes_fn, extension=False) if variables.include_reservoirs else "",
-            
-            dem_file_name_underscore_hyphens        = file_name(dem_fn, extension=False).replace('-', '_'),
-            land_use_file_name_underscore_hyphens   = file_name(landuse_fn, extension=False).replace('-', '_'),
-            soils_file_name_underscore_hyphens      = file_name(soils_fn, extension=False).replace('-', '_'),
-            burn_file_name_underscore_hyphens       = file_name(burn_shape_fn, extension=False).replace('-', '_'),
-            lakes_file_name_underscore_hyphens      = file_name(lakes_fn, extension=False).replace('-', '_') if variables.include_reservoirs else "",
-        )
+                dem_file_name       = file_name(demFn, extension=False),
+                land_use_file_name  = file_name(landuseFn, extension=False),
+                soils_file_name     = file_name(soilsFn, extension=False),
+                burn_file_name      = file_name(burnShapeFn, extension=False),
+                lakes_file_name     = file_name(lakesFn, extension=False) if variables.include_reservoirs else "",
 
-        write_to(f'{proj_dir}/{proj_name}.qgs', project_string)
-        print(f'\n\t> initialised {proj_name}.qgs\n')
+                dem_file_name_underscore_hyphens        = file_name(demFn, extension=False).replace('-', '_'),
+                land_use_file_name_underscore_hyphens   = file_name(landuseFn, extension=False).replace('-', '_'),
+                soils_file_name_underscore_hyphens      = file_name(soilsFn, extension=False).replace('-', '_'),
+                burn_file_name_underscore_hyphens       = file_name(burnShapeFn, extension=False).replace('-', '_'),
+                lakes_file_name_underscore_hyphens      = file_name(lakesFn, extension=False).replace('-', '_') if variables.include_reservoirs else "",
+            )
 
-        if args.m:
-            answer = input("run qswatplus for this region? (Y/n): ")
-            if answer.lower() in ['y', 'yes', '']:
-                os.system(f'run-qswatplus.py {region} --m')
+            write_to(f'{projDir}/{qgsName}.qgs', projectString)
+            print(f'\n\t> initialised {projName}.qgs\n')
+
+            if args.m:
+                answer = input("run qswatplus for this region? (Y/n): ")
+                if answer.lower() in ['y', 'yes', '']:
+                    os.system(f'run-qswatplus.py {region} --m')
 
 print()

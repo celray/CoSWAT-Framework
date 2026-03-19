@@ -64,6 +64,7 @@ asia-mahanadi
 asia-meghna
 asia-mekong
 asia-middle_east
+asia-mun
 asia-narmada
 asia-ob
 asia-pur

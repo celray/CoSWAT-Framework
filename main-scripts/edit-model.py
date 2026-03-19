@@ -13,6 +13,7 @@ GitHub  : github.com/celray
 
 import os, sys, platform, shutil
 from cjfx import list_folders, exists, write_to, read_from, sqlite_connection, list_files, file_name, copy_file, show_progress, goto_dir, pandas, sqlite3, ignore_warnings, download_file
+from coswatFX import resolveRegions
 import datavariables as variables
 import argparse
 
@@ -28,6 +29,7 @@ if __name__ == '__main__':
 
     parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
     parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+    parser.add_argument("--sr", help="subregion directory name", nargs='?', default=None)
     parser.add_argument("--m", help="indicates this is a mannual run", action='store_true')
 
     args = parser.parse_args()
@@ -37,7 +39,7 @@ if __name__ == '__main__':
     else: version = args.v  
 
     # get regions
-    if len(args.r) > 0: regions = args.r
+    if len(args.r) > 0: regions = resolveRegions(args.r)
     else: regions = list_folders(f"../model-setup/CoSWATv{version}/")
 
     if not exists(f"../model-setup/CoSWATv{version}"):
@@ -49,6 +51,33 @@ if __name__ == '__main__':
         sys.exit(1)
 
     for region in regions:
+
+        schemaFn = f'../model-setup/CoSWATv{version}/{region}/schema.json'
+
+        # resolve subregion path from schema.json
+        if args.sr is not None and exists(schemaFn):
+            import json as jsonmod
+            with open(schemaFn, 'r') as f:
+                schemaData = jsonmod.load(f)
+            subDir   = next((s for s in schemaData['subregions'] if s.split('-')[0] == args.sr), None)
+            if subDir is None:
+                print(f"\t! subregion {args.sr} not found in schema for {region}")
+                continue
+            projBase = f'../model-setup/CoSWATv{version}/{region}/{subDir}'
+            qgsName  = f'{region}-{subDir}'
+        elif exists(schemaFn):
+            import json as jsonmod
+            with open(schemaFn, 'r') as f:
+                schemaData = jsonmod.load(f)
+            allSubs = schemaData['subregions']
+            print(f"\t> running edit-model for all subregions: {', '.join(allSubs)}")
+            for subDir in allSubs:
+                srId = subDir.split('-')[0]
+                os.system(f'edit-model.py {region} --v {version} --sr {srId}')
+            continue
+        else:
+            projBase = f'../model-setup/CoSWATv{version}/{region}'
+            qgsName  = region
 
         # get observed scenario and gcm, if many, take first hits
         obsScenario = None
@@ -90,10 +119,10 @@ if __name__ == '__main__':
             shutil.unpack_archive('../data-preparation/resources/swatplus_wgn.zip', '../data-preparation/resources/')
 
         api              = f'../data-preparation/resources/swatplus_api' if platform.system() == "Linux" else None
-        project_db       = f'../model-setup/CoSWATv{version}/{region}/{region}.sqlite'
+        project_db       = f'{projBase}/{qgsName}.sqlite'
         datasets_db_file = f'../data-preparation/resources/swatplus_datasets.sqlite'
         weather_dir      = f'../model-data/{region}/weather/swatplus/{obsScenario}/{obsDataset}'
-        txtinout_dir     = f'../model-setup/CoSWATv{version}/{region}/Scenarios/Default/TxtInOut'
+        txtinout_dir     = f'{projBase}/Scenarios/Default/TxtInOut'
         weather_wgn_db   = f'../data-preparation/resources/swatplus_wgn.sqlite'; weather_wgn_db = os.path.abspath(weather_wgn_db)
         editor_version   = f'3.0.8'
         db_sqlite        = sqlite_connection(project_db) 
@@ -141,6 +170,19 @@ if __name__ == '__main__':
 
         db_sqlite.commit_changes()
 
+        # add column 'netcdf_data_file' to project_config if it does not exist
+        try:
+            # db_sqlite.cursor.execute("ALTER TABLE project_config ADD COLUMN netcdf_data_file TEXT;")
+            db_sqlite.insert_field(table_name='project_config', field_name='netcdf_data_file', data_type='text')
+            db_sqlite.connection.commit()
+            print(f"\t> added 'netcdf_data_file' column to project_config")
+        except Exception as e:
+            if "duplicate column" in str(e).lower():
+                pass  # Column already exists
+            else:
+                print(f"\t! warning: could not add netcdf_data_file column: {e}")
+
+
         # set up project
         command  = f'setup_project '
         command += f"--project_db_file {project_db} "
@@ -162,10 +204,12 @@ if __name__ == '__main__':
         # import weather
         weather_files_list = list_files(f"{weather_dir}/")
         counter = 0; all = len(weather_files_list)
-        print(f'\n\t> copying observed weather files')
-        for fn in weather_files_list:
-            counter += 1; show_progress(counter, all)
-            copy_file(fn, f"{txtinout_dir}/{file_name(fn)}", replace=False)
+
+        if not variables.use_netcdf:
+            print(f'\n\t> copying observed weather files')
+            for fn in weather_files_list:
+                counter += 1; show_progress(counter, all)
+                copy_file(fn, f"{txtinout_dir}/{file_name(fn)}", replace=False)
         
         if exists(f"{txtinout_dir}/tmp.cli"):
             os.remove(f"{txtinout_dir}/tmp.cli")
@@ -190,6 +234,7 @@ if __name__ == '__main__':
         command += f"--file1 {weather_wgn_db} "
         command += f"--wgn_table wgn_cfsr_world "
 
+        '''import_weather --project_db_file ../model-setup/CoSWATv2.0.0/RegionName/RegionName.sqlite --delete_existing y --create_stations n --import_type wgn --editor_version 3.0.8 --import_method database --wgn_db ../data-preparation/resources/swatplus_wgn.sqlite --file1 ../data-preparation/resources/swatplus_wgn.sqlite --wgn_table wgn_cfsr_world'''
         os.system(command = f'{api} {command}')
 
 
@@ -203,12 +248,118 @@ if __name__ == '__main__':
             command += f"--editor_version {editor_version} "
             command += f"--weather_import_format plus "
             command += f"--weather_dir {weather_dir} "
+
+            '''import_weather --project_db_file ../model-setup/CoSWATv2.0.0/RegionName/RegionName.sqlite --delete_existing y --create_stations y --import_type observed --editor_version 3.0.8 --weather_import_format plus --weather_dir ../model-data/RegionName/weather/swatplus/observed/dataset_name'''
             os.system(command = f'{api} {command}')
         else:
-            pass
 
+            os.system(f"/CoSWAT-Global-Model/data-preparation/resources/nc2stations --hmd 0.01 -i {weather_dir}.nc4 -o {weather_dir}.csv")
+
+            command = f'import_weather '
+
+
+            command += f"--project_db_file {project_db} "
+            command += f"--delete_existing y "
+            command += f"--create_stations y "
+            command += f"--import_type netcdf "
+            command += f"--editor_version {editor_version} "
+            command += f"--nc_stations_list {weather_dir}.csv "
+            command += f"--nc_file {weather_dir}.nc4 "
+
+            '''import_weather --project_db_file /repositories/ncFiles/africa-save/africa-save.sqlite --delete_existing y --create_stations y --import_type netcdf --editor_version 3.0.8 --nc_stations_list ./stations.csv --nc_file /repositories/ncFiles/africa-save/Scenarios/Default/netcdf/africa-save.nc4'''
+            os.system(command = f'{api} {command}')
+
+        # insert object.prt records for subregion outlet channels
+        if args.sr is not None and exists(schemaFn) and 'channelMappings' in schemaData:
+            db_sqlite.cursor.execute("DELETE FROM object_prt")
+            objPrtId = 1
+            for connKey, mapping in schemaData['channelMappings'].items():
+                if subDir in mapping and mapping[subDir]['role'] == 'outlet':
+                    channelNum = mapping[subDir]['channel']
+                    toSub      = connKey.split('->')[1]
+                    filename   = f'{args.sr}_to_{toSub}_ch{channelNum}.txt'
+                    db_sqlite.cursor.execute(
+                        "INSERT INTO object_prt (id, ob_typ, ob_typ_no, hyd_typ, filename) VALUES (?, ?, ?, ?, ?)",
+                        (objPrtId, 'out', channelNum, 'tot', filename)
+                    )
+                    objPrtId += 1
+                    print(f'\t> object.prt: out {channelNum} -> {filename}')
+            db_sqlite.commit_changes()
+
+        # insert recall records for subregion inlet channels (downstream receives upstream flow)
+        if args.sr is not None and exists(schemaFn) and 'channelMappings' in schemaData:
+            inletRecalls = []
+            for connKey, mapping in schemaData['channelMappings'].items():
+                if subDir in mapping and mapping[subDir]['role'] == 'inlet':
+                    fromSub    = connKey.split('->')[0]
+                    channelNum = mapping[subDir]['channel']
+                    recName    = f'inlet_from_{fromSub}'
+                    inletRecalls.append((recName, channelNum, fromSub))
+
+            if inletRecalls:
+                # clean existing inlet recalls for re-run safety
+                for recName, _, _ in inletRecalls:
+                    db_sqlite.cursor.execute("DELETE FROM recall_con_out WHERE recall_con_id IN (SELECT id FROM recall_con WHERE name = ?)", (recName,))
+                    db_sqlite.cursor.execute("DELETE FROM recall_con WHERE name = ?", (recName,))
+                    db_sqlite.cursor.execute("DELETE FROM recall_dat WHERE recall_rec_id IN (SELECT id FROM recall_rec WHERE name = ?)", (recName,))
+                    db_sqlite.cursor.execute("DELETE FROM recall_rec WHERE name = ?", (recName,))
+
+                # next available IDs
+                db_sqlite.cursor.execute("SELECT COALESCE(MAX(id),0) FROM recall_rec");    nextRecId    = db_sqlite.cursor.fetchone()[0] + 1
+                db_sqlite.cursor.execute("SELECT COALESCE(MAX(id),0) FROM recall_con");    nextConId    = db_sqlite.cursor.fetchone()[0] + 1
+                db_sqlite.cursor.execute("SELECT COALESCE(MAX(id),0) FROM recall_con_out");nextConOutId = db_sqlite.cursor.fetchone()[0] + 1
+                db_sqlite.cursor.execute("SELECT COALESCE(MAX(id),0) FROM recall_dat");    nextDatId    = db_sqlite.cursor.fetchone()[0] + 1
+                db_sqlite.cursor.execute("SELECT id FROM weather_sta_cli LIMIT 1");        wstId        = db_sqlite.cursor.fetchone()[0]
+
+                for recName, channelNum, fromSub in inletRecalls:
+                    # resolve GIS channel number to internal chandeg_con.id
+                    db_sqlite.cursor.execute("SELECT id FROM chandeg_con WHERE gis_id = ?", (channelNum,))
+                    chaRow = db_sqlite.cursor.fetchone()
+                    if chaRow is None:
+                        print(f'\t! channel gis_id {channelNum} not found in chandeg_con, skipping {recName}')
+                        continue
+                    internalChaId = chaRow[0]
+
+                    # recall_rec: daily timestep
+                    db_sqlite.cursor.execute(
+                        "INSERT INTO recall_rec (id, name, rec_typ) VALUES (?, ?, ?)",
+                        (nextRecId, recName, 1)
+                    )
+
+                    # recall_dat: sample placeholder (2 days, zeroes) — replaced at runtime
+                    for d in range(1, 3):
+                        db_sqlite.cursor.execute(
+                            """INSERT INTO recall_dat (id, recall_rec_id, jday, mo, day_mo, yr, ob_typ, ob_name,
+                               flo, sed, orgn, sedp, no3, solp, chla, nh3, no2, cbod, dox,
+                               sand, silt, clay, sag, lag, gravel, tmp)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (nextDatId, nextRecId, d, 1, d, 1980, 'pt_day', recName,
+                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+                        )
+                        nextDatId += 1
+
+                    # recall_con: connectivity
+                    db_sqlite.cursor.execute(
+                        "INSERT INTO recall_con (id, name, gis_id, area, lat, lon, elev, wst_id, cst_id, ovfl, rule, rec_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (nextConId, recName, channelNum, 0.0, 0.0, 0.0, 0.0, wstId, None, 0, 0, nextRecId)
+                    )
+
+                    # recall_con_out: route into inlet channel (uses internal chandeg_con.id, not GIS number)
+                    db_sqlite.cursor.execute(
+                        'INSERT INTO recall_con_out (id, "order", obj_typ, obj_id, hyd_typ, frac, recall_con_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        (nextConOutId, 1, 'sdc', internalChaId, 'tot', 1.0, nextConId)
+                    )
+
+                    print(f'\t> recall: {recName} -> sdc {channelNum}')
+                    nextRecId    += 1
+                    nextConId    += 1
+                    nextConOutId += 1
+
+                db_sqlite.commit_changes()
 
         # write files
+        db_sqlite.cursor.execute("UPDATE file_cio SET file_name = 'tem.cli' WHERE id='12';")
         db_sqlite.cursor.execute("UPDATE file_cio SET file_name = 'tem.cli' WHERE id='12';")
         db_sqlite.close_connection()
 
@@ -228,9 +379,12 @@ if __name__ == '__main__':
                 f_list = list_files(f'../model-data/{region}/weather/swatplus/{scen}/{gcm}/')
 
                 print(f'\n\t> copying {scen}:{gcm} weather files')
-                for fn in f_list:
-                    copy_file(fn, f"{txtinout_dir}/{scen}/{gcm}/{file_name(fn)}", replace=True)
-
+                if not variables.use_netcdf:
+                    for fn in f_list:
+                        copy_file(fn, f"{txtinout_dir}/{scen}/{gcm}/{file_name(fn)}", replace=True)
+                else:
+                    # copy the netcdf file
+                    copy_file(f'../model-data/{region}/weather/swatplus/{scen}/{gcm}.nc4', f"{txtinout_dir}/{scen}/{gcm}.nc4", replace=True)
 
         # patch file.cio temperature file name
         cioFile         = f"{txtinout_dir}/file.cio"
@@ -239,10 +393,24 @@ if __name__ == '__main__':
         # modify weather path in file.cio
         # pending
 
+        if args.sr is not None:
+            simulationDirectory = f"../../../../../../../simulations/CoSWATv{version}/{region}/{subDir}"
+        else:
+            simulationDirectory = f"../../../../../../simulations/CoSWATv{version}/{region}"
+
+
         cioFileString   = "".join(cioFileContents)
 
-        write_to(cioFile, cioFileString.replace('pcp.cli           null', 'pcp.cli           tem.cli'))
+        cioLines = cioFileString.split('\n')
+        for i, line in enumerate(cioLines):
+            if line.strip().startswith('out_path'):
+                cioLines[i] = f'out_path           {simulationDirectory}'
+                break
+        cioFileString = '\n'.join(cioLines)
+
+        cioFileString = cioFileString.replace('pcp.cli           null', 'pcp.cli           tem.cli')
         write_to(cioFile, cioFileString.replace('tmp.cli', 'tem.cli'))
+
         print(f'done with editor in {region}', 'SWAT+ Editor run complete')
 
         print()

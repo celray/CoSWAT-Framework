@@ -91,46 +91,34 @@ warnings.filterwarnings("ignore")
 me = os.path.realpath(__file__)
 os.chdir(os.path.dirname(me))
 
-args = sys.argv
+import argparse
 
-all_models = list_all_files("../model-setup/", "qgs")
+parser = argparse.ArgumentParser(description="create outlet points for a region")
+parser.add_argument("version", help="model version")
+parser.add_argument("region", help="region name")
+parser.add_argument("--sr", help="subregion directory name", nargs='?', default=None)
 
-if len(args) < 3:
-    versions = {}
+cliArgs = parser.parse_args()
 
-    for model in all_models:
-        model = model.split("/")[-1].split("\\")
-        
-        v = model[0].lower().replace('coswatv', '')
-        r = model[1]
+version     = cliArgs.version
+region      = cliArgs.region
+subDir      = cliArgs.sr
 
-        if not v in versions:
-            versions[v] = []
-        
-        versions[v].append(r)
-            
-    print("please select a version and region (...py version region). these are available:")
-    
-    for k in versions:
-        print(f"    {v}")
-        for m in versions[k]:
-            print(f"\t- {m}")
-    
-    quit()
+proj_auth   = variables.final_proj_auth
+proj_code   = variables.final_proj_code
 
-version = args[1]
-region  = args[2]
+# resolve project directory
+if subDir is not None:
+    projBase = f'../model-setup/CoSWATv{version}/{region}/{subDir}'
+else:
+    projBase = f'../model-setup/CoSWATv{version}/{region}'
 
-proj_auth = variables.final_proj_auth
-proj_code = variables.final_proj_code
-
-channels_fn = f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{proj_auth.lower()}-{proj_code}channel/dem-aster-{proj_auth.upper()}-{proj_code}channel.shp'
-channels_fn = f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{proj_auth.lower()}-{proj_code}channel/dem-aster-{proj_auth.upper()}-{proj_code}channel.shp'
+channels_fn = f'{projBase}/Watershed/Shapes/dem-aster-{proj_auth.lower()}-{proj_code}channel/dem-aster-{proj_auth.upper()}-{proj_code}channel.shp'
 grdc_shp_fn = f'../model-data/{region}/shapes/grdc_stations-{proj_auth.upper()}-{proj_code}.gpkg'
 
 
 if not exists(channels_fn):
-    channels_fn = f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{proj_auth.upper()}-{proj_code}channel.shp'
+    channels_fn = f'{projBase}/Watershed/Shapes/dem-aster-{proj_auth.upper()}-{proj_code}channel.shp'
     if not exists(channels_fn):
         print(f"! the channels file ({file_name(channels_fn)}) was not found")
         quit()
@@ -199,66 +187,48 @@ grdc_point_gdf['X'] = grdc_point_gdf.geometry.x
 grdc_point_gdf['Y'] = grdc_point_gdf.geometry.y
 
 print(f'\n  > removing points that are too close to another [{region}]')
-# get closest points
-kept_points    = []
-skipped_points  = []
+# use spatial index for proximity dedup
+from scipy.spatial import cKDTree
+import numpy as np
 
-for index, row in grdc_point_gdf.iterrows():
-    if row.name in skipped_points:
-        continue
-    if row.name in kept_points:
-        continue
+grdc_point_gdf['X'] = grdc_point_gdf.geometry.x
+grdc_point_gdf['Y'] = grdc_point_gdf.geometry.y
+coords          = np.column_stack([grdc_point_gdf['X'].values, grdc_point_gdf['Y'].values])
+tree            = cKDTree(coords)
+pairs           = tree.query_pairs(variables.proximity_thres)
 
-    closest_points = []
-    for inner_idx, inner_row in grdc_point_gdf.iterrows():
-        if distance([inner_row.X, inner_row.Y], [row.X, row.Y]) <= variables.proximity_thres:
-            closest_points.append(inner_row)
+skippedIndices  = set()
+grdcIndices     = grdc_point_gdf.index.tolist()
 
-    if len(closest_points) >= 2:
-        kept_index          = closest_points[0].name
-        kept_index_dist     = closest_points[0].min_dist_to_lines
+for i, j in pairs:
+    idxI = grdcIndices[i]
+    idxJ = grdcIndices[j]
+    if idxI in skippedIndices or idxJ in skippedIndices: continue
 
-        for close_pt in closest_points:
-            if close_pt.min_dist_to_lines < kept_index_dist:
-                kept_index      = close_pt.name
-                kept_index_dist = close_pt.min_dist_to_lines            
+    distI = grdc_point_gdf.loc[idxI, 'min_dist_to_lines']
+    distJ = grdc_point_gdf.loc[idxJ, 'min_dist_to_lines']
 
-        kept_points.append(kept_index)
+    if distI <= distJ: skippedIndices.add(idxJ)
+    else: skippedIndices.add(idxI)
 
-        for close_pt in closest_points:
-            if (not close_pt.name in skipped_points) and (not close_pt.name in kept_points):
-                skipped_points.append(close_pt.name)
-    else:
-        kept_points.append(index)
-
-
-
-for index in skipped_points:
-    grdc_point_gdf = grdc_point_gdf.drop(index)
-
-
-grdc_point_gdf.reset_index(inplace=True)
-channels_gdf.reset_index(inplace=True)
-
+grdc_point_gdf = grdc_point_gdf.drop(index=list(skippedIndices)).reset_index(drop=True)
+channels_gdf   = channels_gdf.reset_index(drop=True)
 
 print(f'  > attaching points to channels [{region}]')
-# find cloest feature
-
-close_features = {}
+# use spatial index for nearest channel lookup
+channelSindex   = channels_gdf.sindex
+close_features  = {}
 
 for index, row in grdc_point_gdf.iterrows():
-    
-    close_features[row.name]    = None
-    current_distance            = None
-
-    for inner_index, inner_row in channels_gdf.iterrows():
-        if close_features[row.name] is None:
-            close_features[row.name] = inner_index
-            current_distance = inner_row.geometry.distance(row.geometry)
-        else:
-            if inner_row.geometry.distance(row.geometry) < current_distance:
-                close_features[row.name] = inner_index
-                current_distance = inner_row.geometry.distance(row.geometry)
+    nearest = channelSindex.nearest(row.geometry, return_all=False)
+    nearestIdx = list(nearest)[0] if hasattr(nearest, '__iter__') else nearest
+    # refine: check a few candidates from spatial index
+    candidates  = list(channelSindex.query(row.geometry.buffer(variables.channel_snap_thres)))
+    if candidates:
+        bestIdx     = min(candidates, key=lambda ci: channels_gdf.iloc[ci].geometry.distance(row.geometry))
+        close_features[row.name] = bestIdx
+    else:
+        close_features[row.name] = nearestIdx
 
 
 outlet_snap_data = []
@@ -296,7 +266,7 @@ for index in close_features:
 
 
 # print()
-point_data = points_to_geodataframe(outlet_snap_data + points, auth = proj_auth, code = proj_code, out_shape = f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets_tmp.gpkg')
+point_data = points_to_geodataframe(outlet_snap_data + points, auth = proj_auth, code = proj_code, out_shape = f'{projBase}/Watershed/Shapes/outlets_tmp.gpkg')
 
 # print()
 points_template_gdf["canDrop"] = "Yes"
@@ -320,62 +290,84 @@ for index, row in point_data.iterrows():
     counter += 1
 
 print(f'\n  > removing points that are too close to each other (within {variables.data_resolution / 1000}m) [{region}]')
-# Remove points that are within 1 kilometer of each other
-points_to_remove = []
-for i, row_i in points_template_gdf.iterrows():
-    if i in points_to_remove:
-        continue
-    
-    for j, row_j in points_template_gdf.iterrows():
-        if i >= j or j in points_to_remove:
-            continue
-        
-        # Calculate distance between points
-        dist = row_i.geometry.distance(row_j.geometry)
-        if dist < (variables.data_resolution / 1000):  # within the defined resolution
-            if (row_j.canDrop == "Yes") and (row_i.canDrop == "Yes"):
-                points_to_remove.append(j)
-                report(f"removing point {j} (too close to point {i})       ")
+ptCoords        = np.column_stack([points_template_gdf.geometry.x.values, points_template_gdf.geometry.y.values])
+ptTree          = cKDTree(ptCoords)
+ptPairs         = ptTree.query_pairs(variables.data_resolution / 1000)
 
-# instead of removing randomly like above, use point with higher catchment area
+points_to_remove = set()
+for i, j in ptPairs:
+    if i in points_to_remove or j in points_to_remove: continue
+    canDropI = points_template_gdf.iloc[i].get('canDrop', 'No')
+    canDropJ = points_template_gdf.iloc[j].get('canDrop', 'No')
+    if canDropI == "Yes" and canDropJ == "Yes":
+        points_to_remove.add(j)
+        report(f"removing point {j} (too close to point {i})       ")
 
-
-
-
-# Remove the identified points
-points_template_gdf = points_template_gdf.drop(points_to_remove).reset_index(drop=True)
+points_template_gdf = points_template_gdf.drop(index=list(points_to_remove)).reset_index(drop=True)
 
 
 
 points_template_gdf.crs = f"{proj_auth}:{proj_code}".lower()
 
-lakesFN                 = geopandas.read_file(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakes-grand-{proj_auth}-{proj_code}.shp')
+lakesFN                 = geopandas.read_file(f'{projBase}/Watershed/Shapes/lakes-grand-{proj_auth}-{proj_code}.shp')
 buffered_polygons       = lakesFN.geometry.buffer(variables.data_resolution * 10)     # Create a buffer around the polygons
 union_buffer            = buffered_polygons.unary_union    # Combine all buffered polygons into a single geometry
 
 # Select points that are not within the buffered area
 points_template_gdf = points_template_gdf[~points_template_gdf.geometry.within(union_buffer)]
 
-# remove points that are within 1m distance of each other.
-points_to_remove_1m = []
-for i, row_i in points_template_gdf.iterrows():
-    if i in points_to_remove_1m:
-        continue
-    
-    for j, row_j in points_template_gdf.iterrows():
-        if i >= j or j in points_to_remove_1m:
-            continue
-        
-        # Calculate distance between points
-        dist = row_i.geometry.distance(row_j.geometry)
-        if dist < 1:  # within 1 meter
-            points_to_remove_1m.append(j)
-            report(f"removing point {j} (within 1m of point {i})       ")
+# remove points that are within 1m distance of each other
+coords1m        = np.column_stack([points_template_gdf.geometry.x.values, points_template_gdf.geometry.y.values])
+tree1m          = cKDTree(coords1m)
+pairs1m         = tree1m.query_pairs(1.0)
+remove1m        = set()
+for i, j in pairs1m:
+    if i not in remove1m and j not in remove1m:
+        remove1m.add(j)
 
-# Remove the identified points
-points_template_gdf = points_template_gdf.drop(points_to_remove_1m).reset_index(drop=True)
+points_template_gdf = points_template_gdf.drop(index=list(remove1m)).reset_index(drop=True)
 
 
 
-points_template_gdf.to_file(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/outlets.shp', driver = 'ESRI Shapefile')
+# if running for a subregion, clip by subregion mask and add routing points
+subregionsFn = f'../model-data/{region}/shapes/subregions.gpkg'
+if subDir is not None and exists(subregionsFn):
+    subId       = subDir.split('-')[0]
+    masksGdf    = geopandas.read_file(subregionsFn, layer='masks')
+    pointsGdf   = geopandas.read_file(subregionsFn, layer='points')
+
+    # clip by subregion mask
+    maskRow = masksGdf[masksGdf['subregion'] == subId]
+    if not maskRow.empty:
+        points_template_gdf = geopandas.clip(points_template_gdf, maskRow)
+
+    # add routing points
+    for _, pt in pointsGdf.iterrows():
+        if pt['OUTLET_MASK'] == subId:
+            newRow = {'PTSOURCE': 0, 'RES': 0, 'INLET': 0, 'ID': 0, 'PointId': 0, 'geometry': pt.geometry}
+            points_template_gdf = geopandas.GeoDataFrame(pandas.concat([points_template_gdf, pandas.DataFrame([newRow])], ignore_index=True), crs=points_template_gdf.crs, geometry='geometry')
+
+        if pt['INLET_MASK'] == subId:
+            newRow = {'PTSOURCE': 0, 'RES': 0, 'INLET': 1, 'ID': 0, 'PointId': 0, 'geometry': pt.geometry}
+            points_template_gdf = geopandas.GeoDataFrame(pandas.concat([points_template_gdf, pandas.DataFrame([newRow])], ignore_index=True), crs=points_template_gdf.crs, geometry='geometry')
+
+    # deduplicate points within 1m after adding routing points
+    dedupCoords = np.column_stack([points_template_gdf.geometry.x.values, points_template_gdf.geometry.y.values])
+    dedupTree   = cKDTree(dedupCoords)
+    dedupPairs  = dedupTree.query_pairs(1.0)
+
+    dedupRemove = set()
+    for i, j in dedupPairs:
+        if i not in dedupRemove and j not in dedupRemove:
+            dedupRemove.add(j)
+
+    points_template_gdf = points_template_gdf.drop(index=list(dedupRemove)).reset_index(drop=True)
+
+    # renumber IDs
+    points_template_gdf['ID']       = range(1, len(points_template_gdf) + 1)
+    points_template_gdf['PointId']  = points_template_gdf['ID']
+
+    print(f'  > added routing points for subregion {subDir} ({len(points_template_gdf)} total points)')
+
+points_template_gdf.to_file(f'{projBase}/Watershed/Shapes/outlets.shp', driver = 'ESRI Shapefile')
 print()

@@ -130,18 +130,20 @@ if __name__ == '__main__':
     import argparse
     import datavariables as variables
     from ccfx import exists, listFolders
+    from coswatFX import resolveRegions
 
 
     parser = argparse.ArgumentParser(description="a script to dodge reservoir vertices touching streams")
     
     parser.add_argument("r", help="the name of the region to run the model for. If not specified, all regions will be processed.", nargs='*', default=[])
     parser.add_argument("--v", help="the version of the model setup to use. If not specified, the datavariables value will be used.", nargs='?', default=None)
+    parser.add_argument("--sr", help="subregion directory name", nargs='?', default=None)
 
     args = parser.parse_args()
 
     if len(args.r) > 0:
-        regions = args.r
-    else: 
+        regions = resolveRegions(args.r)
+    else:
         print("please specify at least one region to process")
         sys.exit(1)
 
@@ -157,10 +159,13 @@ if __name__ == '__main__':
                     print(f'\t\t- {v}')
             print(f'\t> please specify a valid version using the --v argument')
             sys.exit(1)
-        
-        lakesFN         = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp')
-        streamsFN       = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Shapes/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}channel.shp')
-        demFN           = os.path.abspath(f'../model-setup/CoSWATv{version}/{region}/Watershed/Rasters/DEM/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}.tif')
+
+        if args.sr is not None: projBase = f'../model-setup/CoSWATv{version}/{region}/{args.sr}'
+        else: projBase = f'../model-setup/CoSWATv{version}/{region}'
+
+        lakesFN         = os.path.abspath(f'{projBase}/Watershed/Shapes/lakes-grand-{variables.final_proj_auth}-{variables.final_proj_code}.shp')
+        streamsFN       = os.path.abspath(f'{projBase}/Watershed/Shapes/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}channel.shp')
+        demFN           = os.path.abspath(f'{projBase}/Watershed/Rasters/DEM/dem-aster-{variables.final_proj_auth}-{variables.final_proj_code}.tif')
 
 
         # load data    
