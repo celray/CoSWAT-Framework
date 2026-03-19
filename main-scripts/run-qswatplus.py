@@ -14,8 +14,8 @@ GitHub  : github.com/celray
 import os, sys, platform, math
 
 import shapely
-from ccfx import listFolders as list_folders, exists, ignoreWarnings as ignore_warnings, pandas, createPath, deleteFile, writeFile, unzipFile
-from coswatFX import goto_dir
+from cjfx import list_folders, exists, ignore_warnings, ignore_warnings, goto_dir, pandas
+from ccfx import createPath, deleteFile, writeFile, unzipFile
 from coswatFX import resolveRegions
 import sqlalchemy
 import geopandas

@@ -20,8 +20,7 @@ from osgeo import gdalconst
 import sys, os
 import rasterio
 
-from ccfx import readFrom as read_from, listFolders as list_folders, ignoreWarnings as ignore_warnings
-from coswatFX import open_tif_as_array, write_to, create_path
+from cjfx import open_tif_as_array, read_from, write_to, list_folders, ignore_warnings, create_path
 
 ignore_warnings()
 

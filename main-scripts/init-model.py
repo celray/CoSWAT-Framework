@@ -1,8 +1,7 @@
 #!/bin/python3
 
 import sys, os, json
-from ccfx import *
-from coswatFX import *
+from cjfx import *
 from coswatFX import resolveRegions
 import argparse
 

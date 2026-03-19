@@ -1,8 +1,7 @@
 #!/bin/python3
 
 import sys, os
-from ccfx import *
-from coswatFX import *
+from cjfx import *
 import argparse
 
 ignore_warnings()

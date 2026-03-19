@@ -18,8 +18,7 @@ GitHub  : github.com/celray
 
 import os
 import sys
-from ccfx import *
-from coswatFX import *
+from cjfx import *
 from coswatFX import resolveRegions
 import argparse
 

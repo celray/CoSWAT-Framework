@@ -14,7 +14,7 @@ GitHub  : github.com/celray
 
 # imports
 import os, sys
-from ccfx import listFolders as list_folders, ignoreWarnings as ignore_warnings
+from cjfx import list_folders, ignore_warnings
 
 ignore_warnings()
 
@@ -62,6 +62,6 @@ os.system(f"{get_python_exe()} get-grdc-stations.py {regions_}")
 os.system(f"{get_python_exe()} get-subregions.py {regions_}")
 
 
-from coswatFX import alert
+from cjfx import alert
 alert(f'Finished getting data for {regions_}', 'Data Preparation Complete')
 print()

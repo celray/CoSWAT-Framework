@@ -5,9 +5,9 @@ import sys
 import argparse
 
 import hydroeval
-from ccfx import exists, geopandas, listAllFiles as list_all_files, listFolders as list_folders, pandas, pointsToGeodataframe as points_to_geodataframe, ignoreWarnings as ignore_warnings, deleteFile as delete_file
-from coswatFX import create_path, distance, report, write_to
-from coswatFX import resample_ts_df
+from cjfx import (create_path, distance, exists, geopandas, list_all_files,
+                  list_folders, pandas, points_to_geodataframe, report, ignore_warnings,
+                  resample_ts_df, write_to, delete_file)
 
 # change working directory
 me = os.path.realpath(__file__)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                 import matplotlib
                 matplotlib.use("Agg")
 
-                from coswatFX import make_plot
+                from cjfx import make_plot
 
                 img_pth = f'{model_dir}/Evaluation/Figures/channel_{outlet_closest_channels[id]}-grdc_{outlet_closest_stations[id]}.png'
 
@@ -250,5 +250,5 @@ if __name__ == "__main__":
 
 
 
-        from coswatFX import alert
+        from cjfx import alert
         alert(f'model evaluated for {region}', 'Model Evaluation Complete')
