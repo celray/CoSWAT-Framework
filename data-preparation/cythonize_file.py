@@ -12,7 +12,8 @@ Date    : 2023-12-07 - 10:33
 '''
 
 # imports
-from cjfx import *
+from ccfx import *
+from coswatFX import *
 
 from distutils.core import setup
 from Cython.Build import cythonize

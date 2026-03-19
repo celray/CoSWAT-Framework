@@ -3,7 +3,8 @@
 import multiprocessing
 
 import requests, sys
-from cjfx import *
+from ccfx import *
+from coswatFX import *
 from osgeo_utils import gdal_merge
 import time
 

@@ -20,7 +20,8 @@ GitHub  : github.com/celray
 import os
 import sys
 import sqlite3
-from cjfx import *
+from ccfx import *
+from coswatFX import *
 from coswatFX import resolveRegions
 import argparse
 

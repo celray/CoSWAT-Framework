@@ -7,7 +7,8 @@
 '''
 
 import sys, os
-from cjfx import create_polygon_geodataframe, list_folders, read_from, clip_features, exists, report, create_path, ignore_warnings
+from ccfx import listFolders as list_folders, readFrom as read_from, exists, ignoreWarnings as ignore_warnings
+from coswatFX import create_polygon_geodataframe, clip_features, report, create_path
 
 ignore_warnings()
 

@@ -21,8 +21,8 @@ GitHub  : github.com/celray - github.com/jopator
 # imports
 import time, sys, os
 import datavariables as variables
-from cjfx import clip_features, create_path, list_folders, ignore_warnings
-from ccfx import exists, createPath, downloadFile, uncompress, deleteFile
+from ccfx import listFolders as list_folders, ignoreWarnings as ignore_warnings, exists, createPath, downloadFile, uncompress, deleteFile
+from coswatFX import clip_features, create_path
 import geopandas as gpd
 import numpy as np
 
