@@ -49,3 +49,6 @@ os.system(f"prepare-weather.py {regions_}")
 # get grdc stations
 os.system(f"get-grdc-stations.py {regions_}")
 
+# get subregion data if available
+os.system(f"get-subregions.py {regions_}")
+

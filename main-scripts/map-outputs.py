@@ -50,7 +50,7 @@ def make_gpkg(region, version, map_columns, map_log, subDir=None):
 
     # check if necessary files exist
     if not (exists(hrus2shapefile_fn) and exists(hrus_wb_aa_fn)):
-        write_to(map_log, f'{datetime.datetime.now()} - ! cannot map results from {label}', mode='a')
+        write_to(map_log, f'{datetime.now()} - ! cannot map results from {label}', mode='a')
         print(f'\t! cannot map results from {label}')
         print(f'\t  - check that {hrus2shapefile_fn} exists')
         print(f'\t  - check that {hrus_wb_aa_fn} exists')

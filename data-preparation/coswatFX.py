@@ -1,5 +1,29 @@
 import re, geopandas, os, sys, pandas, platform, math, shutil, sqlite3, zipfile, gzip
-from ccfx import createPath, getFileBaseName, writeFile, readFile, formatTimedelta
+import random, string
+from ccfx import (createPath, getFileBaseName, writeFile, readFile, formatTimedelta,
+                   ignoreWarnings, listFolders, listFiles, listAllFiles, readFrom,
+                   writeTo, deleteFile, deletePath, downloadFile, copyFile, exists,
+                   alert as ccfx_alert, clipFeatures, resampleRaster, unzipFile, pandas, geopandas)
+
+# snake_case aliases for ccfx functions (backward compat with cjfx callers)
+ignore_warnings  = ignoreWarnings
+list_folders     = listFolders
+list_all_files   = listAllFiles
+read_from        = readFrom
+delete_file      = deleteFile
+delete_path      = deletePath
+format_timedelta = formatTimedelta
+
+# these differ from ccfx in defaults or behavior — keep cjfx-compatible versions
+def download_file(url, save_path, exists_action='resume', num_connections=5, v=True):
+    return downloadFile(url, save_path, exists_action=exists_action, num_connections=num_connections, v=v)
+
+def file_name(path_, extension=True):
+    if extension: return os.path.basename(path_)
+    return os.path.basename(path_).split(".")[0]
+
+def rand_apha_num(length=8):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 from datetime import datetime, timedelta
 from glob import glob
 from shutil import copyfile
