@@ -18,11 +18,46 @@ from ccfx import createPath
 import rasterio
 from shapely.geometry import Point, Polygon, MultiPolygon, LineString
 from shapely.ops import unary_union, nearest_points
+from shapely.validation import make_valid
+from shapely.errors import GEOSException
 from collections import defaultdict
 import math
 import os, geopandas, sys, time, random, itertools
 
 # functions
+# repair a polygon that in-memory mutations (moved vertices) may have made invalid
+# or self-intersecting. returns a Polygon/MultiPolygon suitable for boolean ops.
+def sanitizePolygon(geom):
+    if geom is None or geom.is_empty:
+        return geom
+    if geom.is_valid:
+        return geom
+    repaired = make_valid(geom)
+    if repaired.geom_type in ('Polygon', 'MultiPolygon'):
+        return repaired
+    # make_valid can return GeometryCollection; keep only polygonal parts
+    polys = [g for g in getattr(repaired, 'geoms', [repaired]) if g.geom_type in ('Polygon', 'MultiPolygon')]
+    if not polys:
+        return geom.buffer(0)
+    return unary_union(polys)
+
+# robust difference for line-minus-polygon that survives GEOS "side location conflict"
+# when a stream vertex sits exactly on the polygon boundary.
+def safeDifference(lineGeom, polyGeom):
+    try:
+        return lineGeom.difference(polyGeom)
+    except GEOSException:
+        pass
+    try:
+        return lineGeom.difference(polyGeom.buffer(0))
+    except GEOSException:
+        pass
+    try:
+        return make_valid(lineGeom).difference(make_valid(polyGeom))
+    except GEOSException:
+        # last resort: nudge the polygon by a micron so the tangent vertex sits cleanly inside
+        return lineGeom.difference(polyGeom.buffer(1e-3))
+
 # helper to extract point coords from various intersection geometries
 def extractPointsFromGeom(geom, lake_id, stream_id, distance_val=0.0, seen=set()):
     pts = []
@@ -845,22 +880,28 @@ if __name__ == '__main__':
                 lakeGeom = lake.geometry
                 if lakeGeom is None or lakeGeom.is_empty:
                     continue
-                
+
+                # earlier vertex-moving stages can leave lakeGeom self-intersecting; repair before boolean ops
+                lakeGeom = sanitizePolygon(lakeGeom)
+                if lakeGeom is None or lakeGeom.is_empty:
+                    continue
+                lakes.at[lake_idx, 'geometry'] = lakeGeom
+
                 # Find channels that intersect with this lake
                 intersectingStreams = streams[streams.geometry.intersects(lakeGeom)]
                 if intersectingStreams.empty:
                     continue
-                
+
                 lakeBuffered = lakeGeom.buffer(50)  # small buffer for proximity check
-                
+
                 # Collect all outside segments from intersecting streams
                 allOutsideSegments = []
                 for _, stream in intersectingStreams.iterrows():
                     geom = stream.geometry
                     if geom is None or geom.is_empty:
                         continue
-                    
-                    outsidePart = geom.difference(lakeGeom)
+
+                    outsidePart = safeDifference(geom, lakeGeom)
                     
                     if not outsidePart.is_empty:
                         if outsidePart.geom_type == 'LineString':
@@ -1010,7 +1051,12 @@ if __name__ == '__main__':
             lakeGeom = lake.geometry
             if lakeGeom is None or lakeGeom.is_empty:
                 continue
-            
+
+            lakeGeom = sanitizePolygon(lakeGeom)
+            if lakeGeom is None or lakeGeom.is_empty:
+                continue
+            lakes.at[lake_idx, 'geometry'] = lakeGeom
+
             # Find headwater streams that intersect this lake
             for stream_idx in headwaterStreams:
                 stream = streams.loc[stream_idx]
@@ -1022,7 +1068,7 @@ if __name__ == '__main__':
                     continue
                 
                 # Get the part of the stream outside the lake
-                outsidePart = streamGeom.difference(lakeGeom)
+                outsidePart = safeDifference(streamGeom, lakeGeom)
                 if outsidePart.is_empty:
                     continue
                 
