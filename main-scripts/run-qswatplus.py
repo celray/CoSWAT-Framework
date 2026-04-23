@@ -241,15 +241,22 @@ if __name__ == '__main__':
             print(f'\t> subregions to run: {", ".join(allSubs)}')
 
             # run subregions in parallel by spawning separate processes
+            # use threads + subprocess (not multiprocessing.Pool) to avoid fork-safety issues
+            # with the Qt/QGIS application already initialized in this process
+            import threading, subprocess as _sp
+
+            _sem = threading.Semaphore(int(variables.subregionProcesses))
+
             def runSubregion(subDirName):
-                os.system(f'python3 {os.path.realpath(__file__)} {region} --v {version} --sr {subDirName.split("-")[0]}')
+                with _sem:
+                    _sp.call(['python3', os.path.realpath(__file__), region, '--v', version, '--sr', subDirName.split('-')[0]])
 
             # if called with a single --sr, run it directly below
             # if multiple subregions, spawn parallel processes
             if args.sr is None or len(args.sr) != 1 or len(allSubs) != 1:
-                pool = multiprocessing.Pool(int(variables.subregionProcesses))
-                pool.map(runSubregion, allSubs)
-                pool.close()
+                threads = [threading.Thread(target=runSubregion, args=(s,)) for s in allSubs]
+                for t in threads: t.start()
+                for t in threads: t.join()
                 print(f'\n\t> finished all subregions for {region}')
                 continue
 

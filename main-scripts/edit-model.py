@@ -21,6 +21,153 @@ import argparse
 
 ignore_warnings()
 
+
+def activate_paddy(db_sqlite, paddy_crops):
+    if not paddy_crops:
+        return
+
+    cursor = db_sqlite.cursor
+
+    # find rice HRUs whose landuse_lum name starts with any paddy crop prefix
+    placeholders = " OR ".join([f"l.name LIKE '{crop}%'" for crop in paddy_crops])
+    cursor.execute(f"""
+        SELECT h.id, h.name, h.hydro_id, l.name as lum_name
+        FROM hru_data_hru h
+        JOIN landuse_lum l ON h.lu_mgt_id = l.id
+        WHERE {placeholders}
+    """)
+    paddy_hrus = cursor.fetchall()
+
+    if not paddy_hrus:
+        print(f'\t> no HRUs found matching paddy crops {paddy_crops}, skipping paddy activation')
+        return
+
+    print(f'\t> activating paddy for {len(paddy_hrus)} HRUs matching {paddy_crops}')
+
+    # 1. add paddy irr_ops if they don't exist
+    cursor.execute("SELECT COALESCE(MAX(id), 0) FROM irr_ops")
+    next_irr_id = cursor.fetchone()[0] + 1
+
+    cursor.execute("SELECT id FROM irr_ops WHERE name = 'ponding90'")
+    if cursor.fetchone() is None:
+        cursor.execute(
+            "INSERT INTO irr_ops (id, name, amt_mm, eff_frac, sumq_frac, dep_sub, salt_ppm, no3_ppm, po4_ppm) VALUES (?, 'ponding90', 90.0, 1.0, 0.0, 60.0, 0.0, 0.0, 0.0)",
+            (next_irr_id,))
+        next_irr_id += 1
+
+    cursor.execute("SELECT id FROM irr_ops WHERE name = 'ponding_off'")
+    if cursor.fetchone() is None:
+        cursor.execute(
+            "INSERT INTO irr_ops (id, name, amt_mm, eff_frac, sumq_frac, dep_sub, salt_ppm, no3_ppm, po4_ppm) VALUES (?, 'ponding_off', 0.0, 1.0, 0.1, 0.0, 0.0, 0.0, 0.0)",
+            (next_irr_id,))
+
+    # 2. add paddy initial condition if it doesn't exist
+    cursor.execute("SELECT id FROM initial_res WHERE name = 'initwet2'")
+    row = cursor.fetchone()
+    if row is None:
+        cursor.execute("SELECT id FROM om_water_ini WHERE name = 'no_init'")
+        om_row = cursor.fetchone()
+        om_id  = om_row[0] if om_row else None
+
+        cursor.execute("SELECT COALESCE(MAX(id), 0) FROM initial_res")
+        init_id = cursor.fetchone()[0] + 1
+        cursor.execute(
+            "INSERT INTO initial_res (id, name, org_min_id) VALUES (?, 'initwet2', ?)",
+            (init_id, om_id))
+        paddy_init_id = init_id
+    else:
+        paddy_init_id = row[0]
+
+    # 3. add paddy hydrology_wet entry
+    cursor.execute("SELECT id FROM hydrology_wet WHERE name = 'paddy'")
+    row = cursor.fetchone()
+    if row is None:
+        cursor.execute("SELECT COALESCE(MAX(id), 0) FROM hydrology_wet")
+        hyd_wet_id = cursor.fetchone()[0] + 1
+        cursor.execute("""
+            INSERT INTO hydrology_wet (id, name, hru_ps, dp_ps, hru_es, dp_es, k, evap, vol_area_co, vol_dp_a, vol_dp_b, hru_frac)
+            VALUES (?, 'paddy', 1.0, 150.0, 1.0, 150.0, 0.5, 0.75, 1.0, 1.0, 1.0, 1.0)
+        """, (hyd_wet_id,))
+        paddy_hyd_wet_id = hyd_wet_id
+    else:
+        paddy_hyd_wet_id = row[0]
+
+    # 4. add paddy wetland entry
+    cursor.execute("SELECT id FROM wetland_wet WHERE name = 'paddy_wet'")
+    row = cursor.fetchone()
+    if row is None:
+        cursor.execute("SELECT id FROM d_table_dtl WHERE name = 'wetland'")
+        rel_row = cursor.fetchone()
+        rel_id  = rel_row[0] if rel_row else None
+
+        cursor.execute("SELECT id FROM sediment_res LIMIT 1")
+        sed_row = cursor.fetchone()
+        sed_id  = sed_row[0] if sed_row else None
+
+        cursor.execute("SELECT id FROM nutrients_res LIMIT 1")
+        nut_row = cursor.fetchone()
+        nut_id  = nut_row[0] if nut_row else None
+
+        cursor.execute("SELECT COALESCE(MAX(id), 0) FROM wetland_wet")
+        wet_id = cursor.fetchone()[0] + 1
+        cursor.execute(
+            "INSERT INTO wetland_wet (id, name, init_id, hyd_id, rel_id, sed_id, nut_id) VALUES (?, 'paddy_wet', ?, ?, ?, ?, ?)",
+            (wet_id, paddy_init_id, paddy_hyd_wet_id, rel_id, sed_id, nut_id))
+        paddy_wet_id = wet_id
+    else:
+        paddy_wet_id = row[0]
+
+    # 5. create paddy landuse_lum entries (one per crop)
+    paddy_lum_ids = {}
+    for crop in paddy_crops:
+        paddy_lum_name = f"{crop}_paddy_lum"
+        cursor.execute("SELECT id FROM landuse_lum WHERE name = ?", (paddy_lum_name,))
+        row = cursor.fetchone()
+        if row is not None:
+            paddy_lum_ids[crop] = row[0]
+            continue
+
+        # clone from the existing crop's landuse_lum
+        cursor.execute("SELECT * FROM landuse_lum WHERE name = ?", (f"{crop}_lum",))
+        source = cursor.fetchone()
+        if source is None:
+            print(f'\t! landuse_lum "{crop}_lum" not found, skipping paddy lum for {crop}')
+            continue
+
+        cursor.execute("SELECT COALESCE(MAX(id), 0) FROM landuse_lum")
+        new_lum_id = cursor.fetchone()[0] + 1
+        cursor.execute("""
+            INSERT INTO landuse_lum (id, name, cal_group, plnt_com_id, mgt_id, cn2_id, cons_prac_id, urban_id, urb_ro, ov_mann_id, tile_id, sep_id, vfs_id, grww_id, bmp_id, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (new_lum_id, paddy_lum_name, source[2], source[3], source[4], source[5], source[6], source[7], source[8], source[9], source[10], source[11], source[12], source[13], source[14], source[15]))
+        paddy_lum_ids[crop] = new_lum_id
+
+    # 6. update HRUs: assign paddy landuse and link to paddy wetland
+    for hru_id, hru_name, hydro_id, lum_name in paddy_hrus:
+        matched_crop = None
+        for crop in paddy_crops:
+            if lum_name.startswith(crop):
+                matched_crop = crop
+                break
+
+        if matched_crop is None or matched_crop not in paddy_lum_ids:
+            continue
+
+        cursor.execute(
+            "UPDATE hru_data_hru SET lu_mgt_id = ?, surf_stor_id = ? WHERE id = ?",
+            (paddy_lum_ids[matched_crop], paddy_wet_id, hru_id))
+
+    # 7. reduce percolation for paddy HRUs
+    hydro_ids = [str(h[2]) for h in paddy_hrus]
+    if hydro_ids:
+        for i in range(0, len(hydro_ids), 500):
+            batch = hydro_ids[i:i+500]
+            cursor.execute(f"UPDATE hydrology_hyd SET perco = 0.0001 WHERE id IN ({','.join(batch)})")
+
+    db_sqlite.commit_changes()
+    print(f'\t> paddy activation complete: {len(paddy_hrus)} HRUs updated')
+
+
 if __name__ == '__main__':
 
     # change working directory
@@ -202,6 +349,10 @@ if __name__ == '__main__':
 
         db_sqlite.cursor.execute(f"UPDATE project_config SET editor_version = '{editor_version}' WHERE id='1';")
         db_sqlite.commit_changes()
+
+        # activate paddy wetlands for rice HRUs
+        if hasattr(variables, 'paddy_crop') and variables.paddy_crop:
+            activate_paddy(db_sqlite, variables.paddy_crop)
 
         # import weather
         weather_files_list = list_files(f"{weather_dir}/")
